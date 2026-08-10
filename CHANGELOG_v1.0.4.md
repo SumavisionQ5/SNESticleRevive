@@ -1,5 +1,1079 @@
 # SNESticle Revive PS2 v1.0.4
 
+Cumulative changelog for version 1.0.4, compared to tag **v1.0.3**.
+
+Date of this test package: **August 9, 2026**
+
+Version displayed by the program: **SNESticle Revive PS2 v1.0.4**
+
+> This is a test source. Compilation has been validated, but video modes,
+> CDFS and different devices still need confirmation on a real PS2 and on
+> emulators used by the community before a release can be marked as final.
+
+---
+
+## Highlights
+
+- Expanded the **SuperFX/GSU** core, including instruction set, pipeline,
+  code cache, ROM/RAM access and `PLOT`/`RPIX` graphics path.
+- Video backend reduced to interlaced modes **480i** and **1080i**;
+  unstable 240p/288p and 480p paths removed from the GS and menu.
+- Fixed the cause of corruption and flicker in **Issue #19**: emulator
+  textures no longer use fixed addresses that could overlap a physical
+  640x480 framebuffer.
+- 480i and 1080i share a 640x480 framebuffer, 2x font and the same
+  overscan/widescreen path, reducing special states in the renderer.
+- Added **Original** and **Composite** SNES color profiles, selectable and
+  saved in settings.
+- Removed the practical **255/256 item** limit of the browser and ISO CDFS.
+- Directory listing now uses records returned by drivers, avoiding a separate
+  `stat` query for each ROM.
+- Fixed regression where CDFS folders appeared in the list but did not open.
+- Folders now appear as **`> NAME/`**, with the marker and slash always visible.
+- Libretro covers now include **boxart, title, snap and logo**, with optional
+  automatic download via `COVER=y` when creating the ISO.
+- SNES and NES SRAM now separated into `SNESticle/SNES/` and
+  `SNESticle/NES/`, maintaining safe reading and migration of old saves.
+- Completed battery SRAM and **NES cartridge save states**, including CPU,
+  PPU, audio, CHR RAM and mapper private state.
+- Replaced the base **NES/2A03** synthesizer with
+  **Nes_Snd_Emu + Blip_Buffer**: the five channels receive each write at the
+  correct cycle, without losing attacks/short notes between frames.
+- NES output now originates directly at 32 kHz, eliminating the old 44.1 kHz
+  PCM block and the second resampling that could hold or pop notes.
+- Reset and load state also calculate the inclusive scanline until the next
+  VSync, avoiding shortening the first audio block after resumption.
+- Fixed the freeze introduced by r7 when opening NES ROMs that query the APU
+  status on the first cycle of an audio window.
+- Fixed the second r7/r8 freeze on PS2: `Nes_Apu` and `Blip_Buffer` are now
+  constructed explicitly, without depending on `.init_array` in the old
+  PS2SDK startup.
+- Restored access to USB flash drives/HDDs when booting from ISO: the stack
+  uses OPL-compatible `usbd_mini`/FreeUsbd, fixed BDM IRXs and limited wait
+  for slow media to finish mounting on `massN:`.
+- Replaced the user-visible `host:` with a network `smb:` device, loaded on
+  demand and restricted in the browser to reading/opening ROMs.
+- The old Host/NetPlay tab became a full SMB configurator and writes
+  `SMB.CNF` automatically, without requiring the user to mount the file
+  manually.
+- `SMB.CNF` now has write and read fallback on writable ELF directory,
+  `mass0:`/`mass1:`/`mass:` and detected MMCE slots, in addition to
+  `mc0:`/`mc1:`.
+- L2+R2 brings up the menu immediately and schedules SRAM two frames later,
+  without the old fixed one-second wait after saving.
+- Menu music continues to be fed during modals, large folder listing, cover
+  reading/decoding, settings writing and SMB connection.
+- Opening of regular ROM, ZIP and GZ switched to large direct reads via
+  `fileXio`, without opening the same file twice or zeroing 8 MiB unused.
+- Fixed the regression from this switch to `fileXio`: the loader now uses the
+  correct IOP flags and opens regular ROM, ZIP and GZ on all devices again.
+- VRAM writes invalidate the renderer's tilemap/character cache, preventing
+  retention of old graphics after maps, pause, dialogue or new uploads.
+- Rectangular OBJ modes 6/7 now use real 16×32, 32×64 and 32×32; OAM also
+  now respects latch, high address, rotation and horizontal discard.
+  The reported Final Fight 2 scene remains pending retest, with no claim of
+  fix based solely on the host testbench.
+- Fixed SuperFX cache window rotation, execution in RAM `$60-$7F`, byte-by-byte
+  MMIO and the hot loop; heavy diagnostics are now optional.
+- MOD/XM player updated from old libxmp-lite 4.5.0 to official upstream 4.7.2;
+  MOD applies `DEFPAN=50` before loading and receives modern fixes for
+  channel, instrument, effects and ProTracker flow.
+- Initial save state selector now always shows Auto, USB/mass, Memory Card,
+  MMCE and HDD; the default can also persist on writable ELF, USB, MX4SIO or
+  MMCE when no memory card is present.
+- Fixed intermittent boot audio failure, more noticeable in 480i: the service
+  was stopped at the end of initialization and only returned when some core
+  — often NES — sent the first audio block.
+- CDFS no longer uses infinite waits or the 32×32 attempt cascade; missing
+  media or broken reads now terminate with a timeout and real error without
+  freezing the menu, music and ROM loading.
+- The old, overly saturated InfoNES palette replaced by the standard
+  **Mesen2** NTSC 2C02 palette, preserved in RGBA8.
+
+---
+
+## Revision r17: stable sprites and faster DMA
+
+- The GS blender no longer delivers to GIF-DMA the same `BlendInfo` that the
+  CPU reuses to assemble the next scanline. Each line is copied to a stable
+  scratchpad area after `DmaSyncGIF`; CPU and GS remain overlapped, but the
+  DMA does not mix pieces of two lines. This was a direct candidate for the
+  fragmented characters in Final Fight 2.
+- DMA mode 1 for `$2118/$2119`, the common upload path for tiles and sprites,
+  writes linear bursts directly into VRAM and invalidates the cache once per
+  block. Fallback retains remapping, increment and odd final byte.
+- Full OAM update also became a block operation, preserving low-table latch,
+  high-table mirror and priority rotation without paying a call and
+  invalidation per byte.
+- DMA source that crosses `$xx:FFFF -> $xx:0000` is combined into the same
+  block to avoid restarting the DMA mode B port sequence mid-transfer.
+- OBJ with horizontal flip is now fetched from left to right, as on hardware;
+  flip selects the mirrored tile column. Thus clipping at the 34-tile limit
+  discards the correct side.
+- `DecodeBGInfo` starts zeroed, preventing unused fields of BG modes from
+  enabling phantom layers and random work.
+- Host testbench covers OAM block, linear/wrapped/odd-byte VRAM, increment
+  fallback and normal/mirrored OBJ column selection. The scene and FPS of
+  Final Fight 2 still require retest on PS2/NetherSX2.
+
+---
+
+## Revision r16: 480i and 1080i only
+
+- Removed `240p/288p (CRT)` and `480p` modes from the Video Config screen.
+  The video option now toggles directly between `480i (default)` and `1080i`.
+- Eliminated both progressive cases from the backend, including 256x240
+  framebuffer, `GS_FRAME`, 480p DTV mode, `16:9 Safe` letterbox and exclusive
+  VCK parameters. The first boot also requests interlace from `GS_InitGraph`.
+- The CRT/240p-only dilated atlas removed; both remaining modes use the
+  original font with integer 2x scaling on the 640x480 framebuffer.
+- Persisted 480i (`1`) and 1080i (`3`) IDs preserved to not break `video.cfg`.
+  Old settings with ID 0 (240p/288p), ID 2 (480p) or an invalid value
+  automatically fall back to safe 480i.
+- 480i remains the default. 1080i maintains the 1280x960 centered 4:3 viewport
+  and the offset, overscan and widescreen options remain available.
+
+---
+
+## Revision r15: ROM hotfix, PPU/OAM and SuperFX test 5
+
+### Regular ROM, ZIP and GZ open again without losing fast loading
+
+- Revision r14 replaced `fopen`/`fread` with direct `fileXio` calls, but
+  passed newlib's `O_RDONLY`. On the EE this value is `0`; the IOP/iomanX
+  requires `FIO_O_RDONLY`, whose value is `1`. Drivers like CDFS rejected
+  the open before the first byte and, since the three formats share this
+  path, no ROM would start.
+- The two direct entries — uncompressed ROM and the slurp used by ZIP/GZ —
+  now use `FIO_O_RDONLY` and `FIO_SEEK_*` from `io_common.h`.
+- Large reading preserved. The `fileXio` server continues to split the
+  request into 16 KiB blocks on the IOP, so the fix does not reintroduce
+  the small RPCs or duplicate opening that made launching slow.
+
+### New VRAM upload does not reuse old tilemap
+
+- `SnesPPURender::UpdateVRAM()` was empty. The renderer could keep the 33
+  already-decoded tile entries when a game overwrote the tilemap at the same
+  address without changing scroll/base.
+- Every write through ports `$2118/$2119`, including DMA, now schedules a
+  single `BGSCR|BGCHR` invalidation for the next scanline. An entire burst
+  only rebuilds the cache once; the OBJ path continues to read VRAM directly.
+- This addresses the class observed when returning from Super Metroid's map
+  and after dialogue boxes/overlays. The OBJ path reads VRAM directly and
+  receives an independent fix below; both groups must still be retested on
+  PS2.
+
+### Rectangular OBJ and OAM evaluation follow hardware rules
+
+- The old table represented size by a single shift and left modes
+  `OBSEL.5-7 = 6/7` as `??`, mistakenly configured as 8×8 on both selection
+  bits. These modes are rectangular on hardware and appear exactly in games
+  with large sprites, including Final Fight 2.
+- The renderer now stores width and height separately. The correct pairs are
+  16×32/32×64 in mode 6 and 16×32/32×32 in mode 7; scanline selection uses
+  height and horizontal search uses width.
+- Vertical flip also follows the SNES quirk for `H = 2×W`: each square half
+  is flipped within itself, rather than mirroring the entire rectangle.
+- The first visual retest showed that this size correction, in isolation,
+  does not resolve the reported Final Fight 2 scene. Investigation found
+  more objective differences in the path used to feed and select OBJs.
+- `$2102` now preserves the high bit written by `$2103`. In low OAM table,
+  the even byte stays in the latch and the pair is only written when the odd
+  byte arrives; the high table writes immediately and mirrors its 32 bytes
+  across `$200-$3FF`. Reads/writes that advance the address also update the
+  first sprite when priority rotation is on.
+- Sprites completely to the left no longer consume one of the 32 scanline
+  entries. The 34-tile count also excludes the tile ending at `x=-1` and
+  preserves the hardware exception for `OBJ X=256`, which counts even
+  invisible.
+- The `tools/pputest` testbench validates sizes, flip, horizontal limits,
+  latch, mirroring and priority rotation against bsnes/Snes9x. Host tests
+  pass; Final Fight 2 remains **pending visual confirmation** on
+  PS2/NetherSX2 and is not announced as fixed in this revision.
+
+### SuperFX: correct cache, full executable RAM and less EE cost
+
+- The `$3100-$32FF` window now applies the documented rotation by adding the
+  low nine bits of `CBR`. With `CBR=$C3A0`, the logical byte zero is accessed
+  by the CPU at `$3160`; the previous direction placed the program sent to
+  cache in the wrong place.
+- PBR/ROMBR treat the entire `$60-$7F` range as Game Pak RAM, with mirroring
+  by physical size. The previous implementation recognized only `$70/$71`,
+  leaving Mario Chip 1 unable to execute some blocks loaded by the 65816.
+- Writes to R0-R15 pairs preserve the other byte of the register itself,
+  instead of sharing a global latch. The SFR high byte is also writable and
+  the cache is only cleared on the actual `GO=1 -> GO=0` transition.
+- `FMULT/LMULT` accept R4 as destination per hardware. `Step()` was
+  incorporated into the `Run()` loop, removing one C++ call per instruction;
+  the synthetic path host benchmark improved about 15% without increasing
+  generated object size.
+- `SNDBG_LOG` is no longer forced on every build. The normal default is zero
+  and `make SNES_DIAGNOSTICS=1` recompiles the investigation counters when a
+  detailed log is needed.
+- The host testbench passes with diagnostics on and off: 17,960 arithmetic
+  vectors, plus pipeline, MMIO, rotated cache, PBR at `$60`, RAM, branches
+  and `PLOT/RPIX`, all without failures.
+
+---
+
+## Revision r14: ROM loading, MOD/libxmp and save state destinations
+
+### ROMs no longer do duplicate I/O
+
+- `_MainLoopExecuteFile` opened the whole ROM once just to confirm existence
+  and closed the file; then the loader opened and read everything again. The
+  test open was removed and the actual read error became the single
+  confirmation.
+- Uncompressed ROMs use a single large `fileXioRead` call. The IOP `fileXio`
+  server internally splits this request and transfers the blocks via DMA,
+  avoiding the sequence of small RPCs created by the `fread` buffer.
+- ZIP and GZ are still decompressed entirely on the EE, but the compressed
+  file is now measured and read with `fileXioOpen/Lseek/Read`, without the
+  `fopen/fseek/ftell/fseek/fread` chain of stdio.
+- The 8 MiB `memset` done before every launch was removed. The parser already
+  receives the exact size; only a guard of up to 1 KiB after the real end is
+  zeroed to keep old aligned look-ahead accesses safe.
+- The change applies to CDFS, USB/MX4SIO, memory card, MMCE, HDD/PFS and SMB
+  because all these paths go through the same `fileXio` registered in the
+  frontend.
+
+### MOD updated to official libxmp-lite 4.7.2
+
+- The 2021 snapshot of the PS2 fork, based on libxmp-lite 4.5.0, was replaced
+  by the official source `libxmp-lite-4.7.2.tar.gz`, tag/commit
+  `a13276d27feabcf9ee4f982913f718ee05a65cb7`.
+- SHA-256 of imported file:
+  `bace7f53248a2cd5adcf77f9402a8858fc0fec05f4e6d6436e3d2a28d68f640e`.
+- The Makefile now also compiles `misc.c`, `flow.c`, `filetype.c` and `rng.c`,
+  keeping `LIBXMP_CORE_PLAYER` for the embedded configuration.
+- Among upstream accumulated fixes is the regression introduced in 4.5.0 where
+  `xmp_start_player` did not unmute normal channels, along with various
+  instrument, pan, pattern loop and tracker compatibility corrections.
+- Before loading MOD/XM, the frontend sets
+  `XMP_PLAYER_DEFPAN=50`, exactly in the order recommended by upstream. This
+  reduces the hard-pan of classic MODs and prevents a bad TV/HDMI mono
+  downmix from appearing to erase instruments. XM continues using its own
+  pan.
+- This revision only affects menu tracker music. Emulated SNES and NES audio
+  not changed.
+
+### All destinations appear and the default does not depend on memory card
+
+- The selector for the first **L2 + Cross** combination no longer filters the
+  menu by the hardware detected at that moment. It always shows **Auto**,
+  **USB / mass**, **Memory Card**, **MMCE** and **Internal HDD**.
+- Thus it is possible to choose an absent removable medium as default. If it
+  remains absent when saving, the user receives the normal destination error;
+  the preference is not silently switched.
+- `state.cfg` continues to first read the old copies in `mc0:/SNESticle` and
+  `mc1:/SNESticle`. Without a writable card, it uses the ELF's folder when it
+  is local and writable, then `mass0:`, `mass1:`, the alias `mass:` and the
+  enabled/detected MMCE slots.
+- When the ELF came from an ISO but the ROM was opened by another local
+  device, that ROM's exact path also enters the fallback. This includes
+  `mass2+` and the current APA/PFS partition; the preference is re-read as
+  soon as that ROM opens.
+- The configured MX4SIO driver is loaded before reading `state.cfg`, so that
+  the `massN:` fallback exists at the correct time.
+- `cdfs:` and `smb:` remain strictly outside this list: they are read-only ROM
+  sources, not configuration/state destinations.
+- **Ask Save Location Again** removes the active copy and known local
+  fallbacks, so that the next write really asks for the choice again.
+
+### README: NetherSX2 DEV9
+
+- A specific section for NetherSX2 2.2n+ was added: enable
+  **Enable DEV9 Ethernet**, choose **API = Sockets** and **Device = WiFi** on a
+  normal LAN (or VPN/SIM according to the route used by Android).
+- For SMB by numeric IP, DNS1/DNS2 remain on **Auto / 0.0.0.0**. The manual DNS
+  presets are for PS2 game servers and do not replace the PC/NAS address
+  configured in the SNESticle SMB tab.
+- If **API** or **Device** appears as **Not defined**, the virtual PS2 has no
+  network link and SMB ends in timeout/connection error.
+
+---
+
+## Responsiveness revision r13: L2+R2, BGM during I/O and SMB fallback
+
+### L2+R2 no longer waits for memory card or playlist
+
+- The large pause when exiting an SNES game had three stacked costs before
+  `_bMenu` was enabled: the first `BgmNext()` call could scan all music
+  folders, SRAM was written synchronously and success still opened a blocking
+  60-frame modal.
+- `_MenuEnable(TRUE)` now marks and arms the menu immediately, preserves the
+  already loaded decoder and only schedules the save when SRAM is dirty.
+- The pending work waits two full screens. Thus the menu and the
+  `Saving SRAM...` message appear before any memory card RPC.
+- Success/error uses non-blocking status. The artificial one-second wait that
+  did not increase file safety was removed.
+- The forced checksum verification remains at the moment of L2+R2, so a game
+  write that occurred within the normal 30-frame window is not lost.
+- The creation of `SNESticle/SNES` or `SNESticle/NES`, migration of old saves
+  and the explicit confirmation before formatting a card remain unchanged.
+
+### Music keeps playing while UI waits for I/O
+
+- The `audsrv` ring holds approximately 50 ms; any lengthy `fopen`, `dread`,
+  `fwrite` or PNG decode left the tracker without a producer. Additionally,
+  `MainLoopRender()` did not call `BgmUpdate()` while a modal was on screen,
+  so even messages without I/O silenced the music.
+- A dedicated EE helper was created for menu I/O scopes. It receives the
+  libxmp context via a semaphore, synthesizes only the track already in memory
+  and feeds `audsrv`; never opens files, scans devices or tries to load the
+  next track.
+- The helper wakes only on transition to a slow operation and truly sleeps in
+  the kernel when finished. There is no polling, timer or cost from this
+  thread during SNES/NES gameplay.
+- The protection was applied to directory enumeration and sorting on all
+  devices, USB mount/wait, cover indexing and decoding, `video.cfg`,
+  `state.cfg`, SMB configuration/connection and pending SRAM save.
+- Modals now draw the menu in the background and call BGM normally. The status
+  is drawn after the screen, also fixing the order that hid messages.
+- Changing **Menu Music Frequency** restarts the already loaded libxmp player
+  at the new rate, without freeing the module and reloading it from
+  CD/USB/memory card.
+
+### `SMB.CNF` uses all compatible local fallbacks
+
+- **Save & Connect** first updates an already loaded own configuration; for a
+  new file it tries `mc0:/SNESticle`, `mc1:/SNESticle`, the ELF directory when
+  writable, `mass0:`, `mass1:`, the alias `mass:` and the enabled MMCE slots
+  that responded to PING.
+- MX4SIO enters through the same `massN:` namespaces. An ELF started from an
+  HDD APA/PFS partition can write next to it after mapping `hdd0:` → `pfs0:`.
+- Loading follows the same family of paths. Writable own files have priority
+  over the shared `SMB.CNF` of wLaunchELF and over the read-only copy from the
+  ISO, so the newly saved fallback is actually used on reconnection and on the
+  next boot when the respective device is enabled.
+- `mc?:/SYS-CONF/SMB.CNF` remains accepted for compatibility, but is never
+  overwritten by the configurator.
+
+---
+
+## Stability revision r12: 480i boot, CDFS and SMB configuration
+
+### Audio no longer depends on opening an NES game
+
+- Found the link between the seemingly separate symptoms. At the end of boot,
+  `Aud_Clearbuff()` called `audsrv_stop_audio()`, which leaves the IOP player
+  stopped. The legacy `Aud_Play()`, however, was an empty function.
+- The outcome depended on initialization timing: menu music and SNES could be
+  silent, while opening an NES game seemed to "fix" everything because its
+  first PCM block happened to call `audsrv_play_audio()`. 480i only made this
+  order easier to reproduce; it was not a defect of the resolution itself.
+- `Aud_Play()` now truly restarts audsrv with a minimal silent block and the
+  backend explicitly tracks the started/stopped states.
+- The unnecessary stop at the end of boot was removed. `Aud_Pause()`,
+  `Aud_Clearbuff()` and the first enqueue remain coherent in case some future
+  path needs to stop and resume the service.
+- The fix does not change volume, mixer, SPC700, 2A03 or game frequency; it
+  corrects only the audio backend lifecycle.
+
+### CDFS stops freezing the rest of the homebrew
+
+- The driver fork still inherited blocking calls from PS2SDK
+  `sceCdDiskReady(0)`/`sceCdSync(0)`, 32 external attempts and up to 32
+  internal attempts. A bad ISO, missing media or lost CDVD command could keep
+  the EE waiting for I/O indefinitely; during that interval it also stopped
+  feeding audsrv, giving the impression of a music defect.
+- The waits were replaced with non-blocking polling with a defined timeout. A
+  read that exceeds the limit receives `sceCdBreak()`, has a short window to
+  finish and returns an error; only two limited attempts are made.
+- `read()` no longer copies an old/zeroed sector or reports the requested size
+  when the read fails. Now returns `EIO`, invalidates the cache and prevents
+  the loader from treating a corrupt ROM as valid.
+- `dread()` distinguishes normal end of directory from media error.
+  `getstat()` now follows the ioman convention (`0` on success, `-ENOENT`
+  when absent) and never fills the result with an uninitialized structure.
+- The volume descriptor reading validates both the command and the presence of
+  ISO9660/Joliet. The copied name length is also limited before the
+  terminator, removing an out-of-buffer write on the IOP.
+- The recompiled `cdfs_stream.irx` has **11,969 bytes** and SHA-256
+  `f0a14edceb4876130508b0c18ba7c254ccbefa284858d87bc4baebc2ca78cdef`.
+
+### The old Host screen now configures SMB
+
+- The iaddis network tab was repurposed as **SMB Network**. The old
+  host/connect NetPlay controls that did not configure the ROM filesystem were
+  removed from the interface.
+- The screen allows editing via gamepad the server IPv4, port 445/139, share
+  name, username and password. The editor uses Left/Right for cursor, Up/Down
+  for character, Square to delete and Triangle to finish.
+- **Save & Connect** validates the fields, automatically creates
+  `mc0:/SNESticle/SMB.CNF` or uses `mc1:` as fallback, enables the SMB option
+  and only then initializes DEV9, DHCP, `smbman`, authentication and share.
+- Without a memory card, the file can be written next to an ELF started from a
+  writable device. The screen never overwrites the global `SMB.CNF` in
+  `mc?:/SYS-CONF` used by other homebrews.
+- The own configuration in `mc?:/SNESticle` now has priority over a file
+  packaged next to the ELF/on the ISO, allowing correction of IP or password
+  without remastering the disc.
+- Entering the tab is safe and lazy: it only reads the fields. Network and
+  DHCP remain outside boot and are only triggered by the explicit connect
+  command.
+
+---
+
+## Network revision r11: `host:` replaced by read-only SMB
+
+- Identified the purpose of the original `host:` from iaddis: it was the
+  development bridge for **ps2link/ps2client HostFS**, used to send ROMs and
+  modules from the PC. It was not an autonomous network share and depended on
+  metadata provided by the launcher/emulator.
+- Removed `host:` from the normal device list. The internal direct
+  boot/ps2link fallback and old debug paths remain available, without being
+  presented as a ROM source to the user.
+- Added `smb:` as a real iomanX filesystem via the PS2SDK `smbman.irx`. The
+  driver correctly returns `FIO_S_IFREG` and `FIO_S_IFDIR`, avoiding the
+  problem where all HostFS files appeared as folders.
+- `smbman.irx` was fixed in `irx/`, embedded in the ELF and documented with
+  origin, license and SHA-256. No loose IRX needs to accompany the
+  application.
+- Network, DEV9, DHCP, SMB driver, login and share opening are started only
+  when the user chooses `smb:`. Normal boot continues without touching the
+  network.
+- DHCP wait limited to 15 seconds. Absence of cable/server generates
+  `DHCP Timeout` instead of freezing the homebrew indefinitely.
+- Corrected the modern stack interface name from `sm1` to `sm0`. The current
+  PS2SDK SMAP registers `sm0`; before, the configuration could be applied to
+  a nonexistent interface and never obtain an address.
+- Corrected the initialization order to that used by OPL:
+  `ps2dev9 → netman → NetManInit → smap → ps2ip → ps2ipInit`. Thus SMAP link
+  events are not lost before the EE RPC is ready.
+- Added single-share `SMB.CNF`, accepting numeric IP, port, share, user,
+  password and password type. The familiar names from wLaunchELF
+  (`smbServer_IP`, `smbUsername`, `smbPasswordType` and others) are also
+  accepted.
+- The file can sit next to the ELF, in the memory card `SNESticle`/`SYS-CONF`
+  directory or at CDFS root. `SMB_CONFIG=/path/SMB.CNF` includes it at the
+  root of an ISO without printing credentials in the Makefile log.
+- The old **Host (PC link)** option on the second page of Video Config became
+  **SMB (Network)**, reusing the same position in `video.cfg` to maintain
+  compatibility. After an attempt it shows specific errors for configuration,
+  network, protocol, authentication, share or browsing.
+- When returning to the browser while it is in the device list, the list is
+  refreshed; toggling SMB on/off now takes effect without restarting. Also
+  fixed the write before buffer when pressing Triangle on this empty root,
+  now used as a safe refresh.
+- Copy, paste and delete are blocked on all `smb:` paths. The frontend uses
+  the network only to read ROMs/ZIPs/covers; SRAM and save states remain on
+  the already configured local destinations. The documentation also requires
+  a read-only share on the server.
+- Documented the driver limitation to **SMB1/NT1** and the corresponding risk:
+  use only on a trusted/isolated LAN, never expose to the internet. Emulators
+  need to offer real Ethernet DEV9/SMAP; HostFS alone does not substitute the
+  network interface.
+
+---
+
+## Storage revision r10: USB mass/exFAT when booting from ISO
+
+- Identified the difference that explained MMCE working while `mass:` failed:
+  MMCE already used an IRX fixed in the project, but the USB stack was taken
+  from the PS2SDK installed on the builder's machine.
+- The full `usbd.irx` replaced by `usbd_mini.irx` based on the pre-rewrite
+  **FreeUsbd**. It is the variant chosen by OPL for its BDM loader and
+  restored in PS2SDK specifically for USB regressions on real hardware.
+- Load order changed to follow OPL: `bdm` → `bdmfs_fatfs` → `usbd_mini` →
+  `usbmass_bd`.
+- The four USB/BDM IRXs now sit together in `irx/`, with version, origin,
+  license and SHA-256 documented. Thus compiling on Debian/DroidSpaces does
+  not silently change behavior based on the local PS2SDK version.
+- The fixed `bdmfs_fatfs` includes FAT16, FAT32 and **exFAT**, plus MBR/GPT.
+- When choosing `mass0:` or `mass1:`, the browser repeats only the opening of
+  that device for up to three seconds. USB enumeration is asynchronous and
+  the first `dopen` could occur before slow media finished mounting.
+- The wait does not run at boot, nor on CDFS, memory card, MMCE, host or HDD;
+  a missing `massN:` returns to the browser after the limit instead of
+  freezing forever.
+- CDFS continues on its own streaming driver; MMCE continues on the SIO2 path
+  with PING; MX4SIO leverages the same BDM namespace/mount. No core, audio,
+  video, SRAM or save state was changed in this revision.
+- IRX compilation and inspection validated. exFAT flash drive recognition
+  still needs final confirmation on a real PS2 booted from ISO.
+
+---
+
+## NES revision r9: correct APU initialization on PS2
+
+- Fixed the freeze cause that still remained in r8 when opening any NES game,
+  even before the first frame was presented.
+- Current GCC placed the global constructors of `Nes_Apu` and `Blip_Buffer`
+  in `.init_array`, but the PS2SDK script/startup used by the project only
+  traverses the old `.ctors` list. Thus, on PS2, the objects remained merely
+  zeroed and the first APU `output()` accessed null oscillator pointers.
+- The two objects now use aligned static storage and are constructed
+  explicitly by `InfoNES_pAPUInit()`. They remain alive across ROM switches,
+  without depending on implicit C++ runtime support.
+- ELF inspection confirmed that `_GLOBAL__sub_I_pAPUSoundRegs` disappeared and
+  `.init_array` shrank by exactly one four-byte entry.
+- Also validated the real sequence of initially zeroed memory, explicit
+  construction, `$4015` read at cycle zero and 600 frames of audio
+  generation/draining (320,002 samples).
+- Clean compilation of PS2 ELF completed without warnings or errors. The fix
+  is restricted to NES audio initialization; SNES, Final Fight, video,
+  browser, mappers, palette and saves not changed in this revision.
+
+---
+
+## NES revision r8: hotfix for freeze when opening games
+
+- Fixed the read of `$4015` exactly at cycle zero. This access is valid on
+  NES, but the imported routine tried to advance the APU to cycle `-1`.
+- Since consistency `asserts` are active in the PS2 build, the negative time
+  terminated execution inside the library; on console/emulator this appeared
+  only as the homebrew frozen when starting certain games.
+- The read now directly uses the current state when there is no previous
+  cycle and preserves the original event order in all other cycles.
+- Added to the validation process a specific test for reads at cycle zero,
+  after writes in the same cycle and right after `end_frame()`.
+- The fix is restricted to the NES APU. SNES video and audio, Final Fight,
+  mappers, palette, browser and saves not changed in this revision.
+
+---
+
+## NES revision r7: per-cycle audio and 2C02 palette
+
+This revision replaces the first incremental pAPU fix described further below.
+The old items remain in the changelog as pre-release history, but the old PCM
+renderer, its LUTs and the 44.1 → 32 kHz converter are no longer part of the
+executed path.
+
+### Five base channels without lost notes
+
+- Integrated Shay Green's `Nes_Apu`/`Blip_Buffer`, used as a consolidated
+  reference by emulators and the Game Music Emu project.
+- Writes to `$4000-$4013`, `$4015` and `$4017` are applied at the 6502
+  accumulated cycle position. Attacks and cuts that occur within the same
+  frame are no longer reduced to a single register snapshot at VSync.
+- Pulses 1/2, triangle, noise and DPCM maintain their own timers, phases,
+  envelopes, length counters, sweep, linear counter and frame sequencer.
+- Reading `$4015` queries the APU already advanced to the instruction cycle,
+  including the actual DPCM end and frame counter IRQs.
+- DPCM reads directly from the cartridge space via the 6502 callback; thus the
+  address, loop, size and last sample bit follow the core's real state.
+- `Blip_Buffer` generates band-limited audio directly at **32,000 Hz**. The
+  CPU/audio ratio maintains the alternating cadence of 533/534 samples per
+  frame and the output continues to arrive at the PS2's 32 → 48 kHz converter
+  in batches of four.
+- The APU snapshot was remade without pointers: preserves channels, envelopes,
+  phases, noise, DPCM, frame counter and IRQs. r5/r6 states are still accepted;
+  in those old files the registers are reapplied and the audio resumes with a
+  new phase, as the previous PCM format has no exact translation.
+- This change is exclusive to NES. The SPC700, mixer and SNES audio were not
+  modified.
+
+### Less saturated colors
+
+- Replaced the old FCEUX/InfoNES table reduced to RGB555 with the standard
+  **Mesen2 NTSC 2C02** palette, with full 8-bit components in RGBA8.
+- Indices written to palette RAM are now always masked to the six bits
+  existing in hardware (`0x00-0x3F`), avoiding out-of-table reads.
+- The excessively neon green observed in games like **Side Pocket** now uses
+  the same base values as Mesen2. A single red bit remains internally
+  reserved by InfoNES as a background priority marker; this changes at most
+  one level out of 255 and does not visually change the color.
+
+### Scope still separate
+
+- The new core covers the five **base** 2A03 channels. VRC6, VRC7, MMC5, FDS
+  and Sunsoft 5B remain unconnected to the mixer; games that really depend on
+  expansion may still lack those instruments.
+- The result was compiled and structurally validated, but tone, EE load and
+  SPU2 behavior still need confirmation on real PS2/NetherSX2.
+
+---
+
+## SNES Core: SuperFX / GSU
+
+- The GSU implementation is no longer just minimal infrastructure and now
+  covers the functional set of opcodes and their prefixes `ALT`, `TO`, `FROM`
+  and `WITH`.
+- Implemented or fixed, among others:
+  - conditional branches, `LOOP`, `JMP` and `LJMP`;
+  - arithmetic, comparison, multiplication, shifts and rotates;
+  - ROM and Game Pak RAM read/write;
+  - `CACHE`, `GETB`, `GETBH`, `GETBL`, `MERGE`, `LM`, `SM`, `SBK` and related
+    families;
+  - graphics path `COLOR`, `CMODE`, `PLOT` and `RPIX`.
+- Modeled the GSU's real one-byte pipeline, including the delay slot when an
+  instruction changes `R15` and the case where opcode and operands are
+  separated between jump source and destination.
+- Implemented 512-byte code cache, per-line validity, `CBR` alignment and
+  coherent invalidation.
+- Implemented ROM prefetch via `R14`, bank switching and updating of
+  associated registers.
+- The pixel cache now has the two buffers used by the chip, allowing switching
+  between blocks without losing pending pixels.
+- Fixed graphic layouts for 2/4/8 bpp and the 256-pixel object mode.
+- The GSU now advances in slices per scanline, instead of blocking the EE
+  until an entire job finishes; the budget varies according to the selected
+  clock.
+- Completion IRQ is propagated to the 65C816 and lowered by the corresponding
+  status register access.
+- Added a defensive watchdog to return control to the emulator if a GSU
+  program does not finish.
+
+### SuperFX cartridge mapping
+
+- Added board classification **Mario Chip 1**, **GSU1** and **GSU2**.
+- `Star Fox`/`Starwing` use the Mario Chip 1 RAM map; `Star Fox 2` uses the
+  GSU2 map.
+- GSU1 cartridges receive their additional Game Pak RAM mirrors.
+- Added the 32 KiB and 64 KiB per-bank Program ROM views used by the
+  coprocessor, including the high mirrors.
+- SuperFX cartridge types `13h`, `14h`, `15h` and `1Ah` are now explicitly
+  detected.
+- Game Pak RAM size uses the extended header field when available, with safe
+  fallback for old headers.
+- The GSU version register is set according to the board and preserved during
+  reset.
+- Default ROM classification was initialized deterministically, avoiding
+  random flags on unknown cartridge types.
+
+### PPU and core diagnostics
+
+- Fixed OAM priority rotation when writing to `$2102/$2103`; turning rotation
+  off correctly returns to the first sprite and invalidates the rendered list
+  when necessary.
+- The `superfxtest` testbench gained tests for pipeline, branches, cache, VCR,
+  arithmetic operations, ROM access, two pixel buffers and graphic modes.
+- Optional instrumentation of CPU, PPU, GSU, DMA, HDMA, APU, mixer and sprites
+  was expanded under `SNDBG_LOG`; remains out of the normal path when the log
+  is disabled.
+
+---
+
+## PS2 Video and Rendering
+
+### Framebuffers per mode
+
+- **240p/288p:** physical `256x240` framebuffer, keeping the native 256
+  horizontal samples of SNES/NES. This eliminates the previous digital
+  scaling from 256 to 640 pixels and reduces shimmer on horizontal scrolling.
+- **480i:** `640x480` framebuffer; the 240 logical lines now use exact 2x
+  vertical scaling instead of 240 to 448.
+- **480p:** full progressive `640x480` framebuffer.
+- **1080i:** `640x480` source presented in a 4:3 `1280x960` window, centered
+  on the 1080i raster, instead of automatically stretching to 16:9.
+- On PAL consoles, CRT mode continues using the appropriate raster, shown as
+  240p/288p in the interface.
+
+### Issue #19: corruption, banding and flicker in 480p
+
+- Removed the fixed VRAM layout that placed `_OutTex` at `0x2400`.
+- At `640x480`, this address fell inside the area occupied by the second
+  framebuffer; the texture overwrote approximately the last lines of
+  alternating frames, causing repeated bands, broken image and flicker.
+- Framebuffers are reserved first by gsKit; then `_OutTex`, font, cover
+  texture and blender temporary area are allocated dynamically and aligned.
+- Initialization fails in a controlled manner if the four regions do not fit
+  in the 4 MiB of VRAM, instead of continuing with overlapping addresses.
+- The cover texture and font also no longer depend on fixed positions.
+- The entire physical framebuffer is cleared every frame, avoiding old pixels
+  in bars, borders and regions outside the logical canvas.
+
+### Issue #26: font at 240p
+
+- The font is now drawn at 1x on the native 240p framebuffer and at 2x in
+  higher modes.
+- Position and advance use the same logical/physical transformation, keeping
+  texts centered and columns aligned.
+- Glyph drawing avoids fractional sampling with `NEAREST`, reducing clipped
+  letters or variable width.
+- After CRT testing showed that single-scanline horizontal strokes still
+  seemed cut, `FontInit()` now generates in RAM a specific atlas for 240p:
+  each ink pixel is repeated one line below.
+- The dilation uses the already existing empty line between glyphs and is done
+  once at font upload, without duplicating hundreds of primitives per frame.
+- The embedded atlas remains intact; 480i, 480p and 1080i use the normal
+  version, so the fix does not thicken the font at resolutions that were
+  already fine.
+- This visual revision does not change audio, emulation pace, SRAM, PPU or
+  game-specific logic.
+
+### Widescreen, overscan and offsets
+
+- Added transformation with scale and offset at the primitive level.
+- Fixed the application of widescreen/overscan/offset during a video reset at
+  boot; previously the routine could return early.
+- **480p widescreen** uses a `640x360` canvas centered on the `640x480`
+  framebuffer, with clean black bars. This avoids the negative `StartX` and
+  wrap to 4095 that made NetherSX2 identify/render the image incorrectly.
+- The other modes keep the PCRTC path already used for 16:9 presentation.
+- The interface identifies the special case as **`16:9 Safe`**.
+
+---
+
+## SNES Colors
+
+- Fixed an old error in calibration: RGB values were passed by value and thus
+  the YIQ calculation never altered the final palette.
+- Added two profiles:
+  - **Original:** visual behavior of previous versions and initial default;
+  - **Composite:** applies the existing YIQ/brightness calibration in the
+    core.
+- Switching is done live at **Video Config > SNES Colors**.
+- The selected profile is saved to the memory card.
+- v16 settings are migrated to v17 without losing video mode, offsets,
+  widescreen, volumes or devices; on migration the profile is set to Original.
+
+---
+
+## NES Audio and Performance (InfoNES) — first revision, superseded by r7
+
+> History of the first attempt in this pre-release. The current active path is
+> the `Nes_Snd_Emu + Blip_Buffer` documented in the r7 section above.
+
+### pAPU channels and timing
+
+- The 16.16 divisor used by DPCM at 44.1 kHz was corrected from `265664` to
+  `2659741` (`1789773 / 44100 * 65536`). The old value was not a simple
+  approximation: a digit was missing and DPCM samples/effects played about ten
+  times slower, changing pitch and duration.
+- The direct `$4011` DAC now keeps its output even with `$4015` DMA off, as in
+  the real 2A03.
+- The last bit of each DPCM byte is no longer discarded; deltas use the
+  correct two-level steps within the seven-bit range.
+- Status read at `$4015` was separated from the last written value. Bit 4 now
+  indicates the actually remaining DPCM size and returns to zero at sample
+  end, allowing games that poll to start the next effect.
+- Fixed the known case where pulse 1/2 note kept playing after length counter
+  expired when the `halt/loop` flag was active.
+- Writes to the low period of pulses and noise no longer mistakenly reload
+  their length counters; only the high register triggers the new note.
+- The pulse and triangle dividers now use `timer + 1`, removing the small
+  systematic tuning deviation of the old path.
+- Pulse and noise envelopes now correctly distinguish constant volume from
+  envelope, start at 15 when triggering a note and decay at 240 Hz. Previously
+  the logic was inverted and unsigned accumulators prevented correct decay.
+- Sweep of both pulses was moved to 120 Hz and corrected for the negation
+  difference between pulse 1 and pulse 2.
+- The triangle linear counter stopped decreasing once per PCM sample. It is
+  now reloaded/counted by the frame sequencer; this recovers bass lines and
+  other instruments that disappeared in a few milliseconds.
+- Noise again uses a 15-bit LFSR with non-zero seed, correct long/short taps
+  and correct volume/envelope.
+- When a channel is silenced or receives an invalid period, all remaining
+  samples in the frame are written with zero. The old code exited the loop and
+  left previous frame data, a direct cause of stuck notes and pops.
+- Writes to pAPU registers receive a timestamp from the accumulated 6502 clock.
+  The `K6502_Step()` overshoot value is no longer confused with frame time,
+  avoiding shifting attacks and cuts to the start of the block.
+- The event queue gained a defensive limit to prevent memory overwrite on ROMs
+  that excessively write to audio registers.
+
+### PS2 Mixer and Output
+
+- The five base channels are no longer summed with equal weight and a fixed DC
+  center. The frontend uses two precomputed tables with the 2A03's non-linear
+  curves for **pulse** and **triangle/noise/DPCM**.
+- A simple DC blocker removes the DAC offset without the artificial jump that
+  caused pops at sound onsets/offsets.
+- The 44.1 kHz → mixer rate converter maintains 32.32 position and the last
+  sample between frames. It no longer repeats the edge or restarts
+  interpolation every VSync.
+- The fractional ratio 44,100 → 32,000 produces the correct cadence of
+  533/534 samples per frame (exact average 32 kHz), instead of always
+  truncating to 533 and playing slowly with small discontinuities.
+- Delivery to `AudMixBuffer` uses multiples of four batches, compatible with
+  the 32 → 48 kHz converter and without losing the odd sample in `Flush()`.
+- Filter/resampler history is zeroed on ROM reset or state load. The pAPU
+  snapshot image was bumped to version 2, but NES v1 states from this
+  pre-release are still accepted and have the old DAC converted.
+- All these changes are in the **NES** core/path; SPC700 mixer and SNES audio
+  were not altered.
+
+### Cost and limits of this round
+
+- Envelope, sweep and counters left the 735-sample loops and now run only on
+  the four/two ticks needed per frame. Mixing uses LUTs and does no divisions
+  in the normal per-sample path.
+- Heavy scenes may still exceed 16.6 ms due to CPU/PPU/mappers and need
+  profiling/testing on real PS2; this round removes audio waste but does not
+  promise 60 fps on every ROM.
+- The five **base** 2A03 channels were corrected. Expansion audio VRC6, VRC7,
+  MMC5, FDS and Sunsoft 5B remain a separate step; thus a Japanese ROM that
+  depends on these chips may still have missing instruments.
+
+---
+
+## SNES/NES SRAM and Save States
+
+### SRAM organization and compatibility
+
+- SRAM inside the memory card save is now separated by system:
+  - `mc0:/SNESticle/SNES/<rom>.srm` for SNES;
+  - `mc0:/SNESticle/NES/<rom>.srm` for NES.
+- The main folder `mc0:/SNESticle/` continues to contain the icon, settings
+  and save state banks; the `SNES` and `NES` subfolders are exclusive for
+  SRAM.
+- Old SNES saves at `mc0:/SNESticle/<rom>.srm` remain compatible. If the new
+  file does not exist, the emulator reads the old one, marks a migration and
+  writes a copy into `SNES/` on the next menu opening. The original is not
+  erased.
+- Subfolder creation is done on demand and works again after card swap,
+  without depending on a global cache that confused SNES and NES.
+- The SRAM checksum is now also initialized when the file does not yet exist,
+  avoiding inheriting the dirty state from the previously loaded game.
+
+### NES battery SRAM
+
+- `NesSystem::GetSRAMBytes()` and `GetSRAMData()` implemented.
+- iNES ROMs with the battery flag expose the full 8 KiB of InfoNES SRAM; ROMs
+  without battery do not create an unnecessary `.srm`.
+- SRAM is zeroed when inserting another cartridge, before reading the save,
+  preventing bytes from the previous game from leaking into the new ROM.
+- 512-byte iNES trainers are copied to `$7000-$71ff`, as required by the
+  format, without interfering with later SRAM restoration.
+
+### NES save state
+
+- The existing manager now accepts `.nes` cartridges on the same five slots
+  and destinations Auto, USB, memory card, MMCE and Internal HDD.
+- NES states use banks `.n1a/.n1b` through `.n5a/.n5b`; SNES states preserve
+  the existing `.s1a/.s1b` names. On the card, both remain directly in
+  `mcN:/SNESticle/`, according to the existing destination option.
+- The maintenance browser recognizes the `.nNa/.nNb` banks, removes the safety
+  pair when deleting a slot and hides the new SRAM folders.
+- `NesStateT` is no longer a 64 KiB placeholder and now serializes:
+  - 6502 registers, interrupts and clocks;
+  - RAM, SRAM, PPU RAM, OAM, registers, scroll, scanline and palette;
+  - CHR RAM and decoded pattern cache;
+  - pAPU state, including envelopes, phases, counters and DPCM;
+  - private RAM, registers, latches and IRQ counters of all mappers compiled
+    into InfoNES;
+  - active PRG/CHR/SRAM banks and renderer bases.
+- No raw addresses are saved: each bank pointer becomes a region + offset
+  reference and is validated/rebuilt on load. Thus the state does not depend
+  on the address where ROM and buffers were allocated after restart.
+- The external container keeps version, ROM identity/CRC, payload CRC, deflate
+  compression and the two power-loss-resistant banks. A system ID added to the
+  reserved field maintains compatibility with existing SNES v1 states.
+- FDS states remain outside this support; the menu informs that the current
+  feature is intended for iNES cartridges.
+
+---
+
+## SNES and NES Covers
+
+### Formats, types and navigation
+
+- Support maintained for simple PNG with the same base name as the ROM and for
+  manual extras `Game-1.png` through `Game-9.png`.
+- The Libretro layout now recognizes the four directories available for SNES
+  and NES: `Named_Boxarts`, `Named_Titles`, `Named_Snaps` and `Named_Logos`.
+- The □ button cycles only through existing images, in this order: simple
+  image, boxart, title, snap, logo and numbered extras.
+- The PNG name list now grows on demand, starting at 256 entries and reaching
+  up to 16,384. This prevents collections with multiple types per ROM from
+  being cut by the old fixed limit of 2,048 names.
+- Image cache and index are still freed before starting a ROM, returning
+  memory to the core.
+- The in-RAM index is now sorted once and queried via binary search, instead
+  of comparing each requested name with all PNGs multiple times per frame.
+- Prefetch of neighboring covers gained initial delay and inter-decode
+  interval, avoiding multiple heavy reads/decodes in consecutive frames.
+- The folders `Named_Boxarts`, `Named_Titles`, `Named_Snaps`, `Named_Logos`
+  and the `COVERS.IDX` file are now hidden from the game list.
+
+### Automatic download via Makefile
+
+- Added `COVER=y` and its lowercase equivalent `cover=y` to the `make iso`
+  target. `COVER=n` remains default and does not access the internet.
+- When enabled, the build queries the official Libretro SNES and NES
+  collections and adds the four PNG types only to the temporary `cdfs:/ROMS/`
+  tree. The ROM and its original folder are not modified.
+- System detected by SNES/NES extensions. ZIP files are inspected when
+  possible; `COVER_SYSTEM=snes` or `COVER_SYSTEM=nes` allows resolving
+  ambiguous compressed files.
+- Matching tries exact name, Libretro-style replacement of invalid characters
+  with `_`, removal of GoodTools tags, `(U)/(E)/(J)/(W)` abbreviations and the
+  internal name of a single ROM in ZIP.
+- Valid covers that already exist are preserved. Absences, unrecognized names
+  and network failures are summarized without preventing ISO creation.
+- The downloader generates a compact `COVERS.IDX` in each ROM folder. On CDFS
+  and other slow devices, the emulator reads this file sequentially once and
+  avoids separately enumerating the four `Named_*` directories; manual layouts
+  without an index continue using the compatible fallback.
+- Added `make covers ROMS=/folder`, which creates the same `Named_*` layout
+  directly in a folder intended for USB, MX4SIO, MMCE, HDD, memory card or the
+  SMB-exported directory, without needing to generate an ISO.
+- `COVER_JOBS` controls parallelism and `COVER_BASE_URL` allows a mirror or
+  local test of the downloader.
+
+### Documentation
+
+- The README covers section was rewritten in English with complete naming
+  examples for `.sfc`, `.nes` and `.zip`.
+- Added separate links for the Libretro SNES and NES collections, a table
+  explaining each `Named_*`, examples of multiple images for the same ROM and
+  instructions for CDFS and all other devices.
+- Explicitly documented that the automation adds PNGs but never injects files
+  inside the ROM, renames the game or alters its bytes.
+
+---
+
+## Browser, Devices and CDFS
+
+### Speed and cross-device compatibility
+
+- CDFS, USB/mass, memory cards, `smb:`, MMCE and PFS/HDD use
+  `fileXioDopen/fileXioDread` as the common enumeration path.
+- The directory record already contains name, mode and size; recognized ROMs
+  do not generate an additional `stat` or optical seek per item.
+- File types returned by old ioman drivers are consumed in the `FIO_S_*`
+  format already normalized by iomanX.
+- Fixed the regression of the first CDFS optimization: the browser was
+  reapplying the old `FIO_SO_*` conversion, classifying `ROMS` and `BGM` as
+  files. Now these entries open as directories again.
+- Third-party drivers that do not inform the type get a full-path fallback
+  (`getstat` and, if needed, a safe `dopen` attempt).
+- The fallback only occurs for unknown type; it does not reduce the speed of
+  the normal ROM list.
+
+### Over 256 ROMs in ISO
+
+- The browser array on the EE now grows geometrically: 256 is only the initial
+  reserve, not a limit.
+- The real limit becomes the available memory, with allocation failure
+  handling and no writing beyond the buffer.
+- The built-in CDFS driver is a fork of the PS2SDK CDFS that streams
+  ISO9660/Joliet records through a small sector window.
+- The fixed `TocEntry[256]` table of the default driver was removed from the
+  `dopen/dread` path, allowing listing of large folders without truncation
+  from item 256.
+- The new `cdfs_stream.irx` is embedded in the ELF, loaded at boot and
+  correctly reinitialized after IOP reset.
+
+### Browser Interface
+
+- Folders are rendered as **`> NAME/`**.
+- The marker `>` and the trailing slash `/` are fixed; only the middle name
+  receives ellipsis or marquee when it exceeds the available width.
+- The change is visual only and does not modify the name sent to `Chdir()` or
+  the ROM loader.
+- The number of visible lines is calculated from the actual font height and
+  ends before the footer.
+- The list text no longer overflows the bottom bar in large directories.
+- PNG files used as covers remain hidden from the ROM list.
+
+---
+
+## Interface and Footer
+
+- Removed the IP address from the footer; this information already exists on
+  the network configuration screen.
+- Restored the dark cyan bottom bar inspired by the original iaddis visual.
+- The footer is drawn after the active screen, preventing browser items from
+  covering it.
+- The footer keeps the GCC version on the left and the program version aligned
+  to the right.
+- Video mode names updated to describe the signal used: `240p/288p (CRT)`,
+  `480i (default)`, `480p` and `1080i`.
+
+---
+
+## Build and Source Code
+
+- `cdfs_stream.irx`, its source code and license are included in the tree.
+- The Makefile automatically verifies and embeds the new IRX.
+- `tools/fetch_libretro_covers.py` implements the optional cover preparation
+  with no external Python dependencies.
+- Video regions no longer depend on address constants between modes.
+- The ZIP package preserves the `SNESticleRevive/` root folder and excludes
+  `.git`, build results and generated ELFs.
+- From this test package onward, the requested delivery is **source +
+  changelog**; no precompiled ELF accompanies the downloads sent in this
+  conversation.
+
+### Validation performed in this environment
+
+- Clean compilation of the source extracted from the ZIP with the PS2DEV
+  toolchain: **161 files compiled**.
+- Result of this source: **161/161 files**, **0 errors** and **0 warnings**.
+- Confirmed in the final ELF that `smbman.irx` was indeed embedded, including
+  the protocol identifier `NT LM 0.12`; the fixed binary was also checked
+  against the documented SHA-256.
+- The DPCM clock was checked against `1789773 / 44100`: the corrected step
+  results in `40.5844269` cycles/sample, against the exact `40.5844218`; the
+  old resulted in only `4.0537109`.
+- A 600-frame simulation of the continuous resampler generated **320,000
+  samples** in 10 seconds (exact 32,000 Hz), with no batch non-multiple of
+  four and no accumulated pending samples.
+- The downloader was validated with a local collection: an SNES ROM in
+  GoodTools format `(U) [!]` and an NES ROM inside a ZIP found the
+  corresponding Libretro names and produced **8/8 images** across the four
+  categories.
+- A second execution of `make covers` recognized the eight existing PNGs and
+  did not overwrite any of them.
+- The new index was validated with four types for a GoodTools ROM: it generated
+  a four-entry `COVERS.IDX`, and a second execution preserved all existing
+  PNGs while updating the index.
+- The preparation of `cdfs:/ROMS/` was verified with `COVER=n` on an already
+  prepared folder: ROM, four `Named_*` directories and `COVERS.IDX` were fully
+  copied to the ISO tree.
+- `COVER=y` and `cover=y` were tested in the preparation of `cdfs:/ROMS/`: the
+  PNGs were placed only in the temporary ISO tree and the original folder
+  remained with zero PNGs.
+- The final ISO image was not produced in this environment because there is no
+  `mkisofs`/`genisoimage`/`xorriso`; the complete stage before the ISO
+  generator, including `SYSTEM.CNF`, ROMs and CDFS covers, was validated.
+- The source ZIP is tested with `unzip -t`.
+- The package is extracted to a temporary folder and recompiled to confirm it
+  does not depend on the original working directory.
+
+---
+
+## Points that still require community testing
+
+- Confirm 480i on NTSC/PAL, PS2-to-HDMI adapters and NetherSX2.
+- Confirm 4:3 aspect ratio and widescreen option at 1080i on different TVs.
+- Open `cdfs:/ROMS/`, subfolders and an ISO with more than 256 ROMs.
+- Repeat browsing on `mass0:`, `mass1:`, `mc0:`, `mc1:`, `smb:`, MMCE and
+  HDD/PFS partitions; for SMB, test guest, user/password and large folders on
+  a real PS2 connected via Ethernet.
+- Compare Original and Composite profiles on games with gradients,
+  transparency and skin tones; visual preference remains subjective.
+- Compare on real PS2 the music and effects of the five base channels,
+  including **Double Dragon** (stuck note), **Battletoads & Double Dragon**
+  (DPCM) and **Castlevania III US** (`$4015` polling). The Japanese edition of
+  Castlevania III uses VRC6 and remains outside the base audio of this round.
+- Leave an NES game playing for several minutes and test pause/reset/load
+  state to confirm absence of pops, pitch drift and lost odd samples.
+- Validate SuperFX games from different boards, including Star Fox/Starwing,
+  GSU1 and GSU2 titles. The core received unit tests, but game-by-game
+  compatibility still depends on real tests.
+
+---
+
+## Technical references and credits for this round
+
+- Original project and interface layout: iaddis/SNESticle PS2.
+- PS2SDK: iomanX/fileXio and CDFS driver base.
+- PS2SDK `smbman`, OPL and wLaunchELF_ISR: reference for login, share opening
+  and network/SMB initialization order.
+- PicoDrive PS2 by irixxxx: reference for defensive resolution of directory
+  entries without known type.
+- `fhoedemakers/pico-infonesPlus`: modern InfoNES reference for pulse stuck
+  note fixes, DPCM DAC/status and missing effects (including Issue #111 of
+  that project).
+- `jay-kumogata/InfoNES`: source of the integrated pAPU and base used to
+  compare local PS2 frontend changes.
+- `libgme/game-music-emu`: source of `Nes_Snd_Emu` and `Blip_Buffer` (Shay
+  Green, LGPL-2.1+), used by revision r7 for the five base 2A03 channels.
+- `SourMesen/Mesen2`: reference for the standard NTSC 2C02 palette used by
+  revision r7 to remove the excessive InfoNES saturation.
+- InfinityStation: previous reference for banding cleanup and browser visual
+  behavior.
+- Issue #19 and #26 reports and community-submitted tests.
+- Observations by jsr on 240p/480i/480p scaling and horizontal sampling.
+
+========================================================================
+
+# SNESticle Revive PS2 v1.0.4
+
 Changelog acumulado da versão 1.0.4, comparado com a tag **v1.0.3**.
 
 Data deste pacote de teste: **9 de agosto de 2026**
