@@ -1,0 +1,57 @@
+name: Build PS2
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+  workflow_dispatch:        # 允许在 Actions 页面手动点击运行
+  schedule:
+    - cron: "0 3 * * 1"     # 可选：每周一自动编译最新源码
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ps2dev/ps2dev:latest   # 官方预装好 PS2 工具链的镜像
+    env:
+      PS2DEV: /usr/local/ps2dev
+      PS2SDK: /usr/local/ps2dev/ps2sdk
+      PS2SDKSRC: /usr/local/ps2dev/ps2sdk/src
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive   # 如果项目有子模块
+
+      - name: Install extra build deps (if any)
+        run: |
+          # 仓库 README 提示只需 PS2SDK；如果还需要额外包，在这里 apt-get 安装
+          echo "Toolchain ready:"
+          ee-gcc --version | head -1
+
+      - name: Build
+        run: |
+          make clean || true
+          make -j$(nproc)
+
+      - name: Pack ELF (optional, 压缩成 OPL/HDL 可用的格式)
+        run: |
+          # ps2-packer 把 ELF 重新打包，通常体积更小
+          for f in *.elf; do
+            [ -f "$f" ] && ps2-packer "$f" "${f%.elf}-packed.elf" || true
+          done
+
+      - name: List outputs
+        run: |
+          echo "=== Build results ==="
+          ls -la *.elf *.iso 2>/dev/null || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SNESticleRevive-PS2-${{ github.sha }}
+          path: |
+            *.elf
+            *.iso
+          if-no-files-found: error
