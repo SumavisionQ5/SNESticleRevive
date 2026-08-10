@@ -25,7 +25,7 @@ jobs:
       - name: Build inside ps2dev container
         uses: docker://ps2dev/ps2dev:latest
         with:
-          args: bash -c "make clean || true && make -j$(nproc)"
+          args: sh -c "make clean || true && make -j$(nproc)"
         env:
           PS2DEV: /usr/local/ps2dev
           PS2SDK: /usr/local/ps2dev/ps2sdk
