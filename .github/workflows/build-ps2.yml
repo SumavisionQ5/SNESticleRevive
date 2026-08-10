@@ -9,27 +9,26 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: ps2dev/ps2dev:latest   # 基于 Alpine 的官方工具链镜像 [4]
     env:
       PS2DEV: /usr/local/ps2dev
       PS2SDK: /usr/local/ps2dev/ps2sdk
       PS2SDKSRC: /usr/local/ps2dev/ps2sdk/src
 
     steps:
-      # 在宿主机上 checkout，git 版本足够新，submodules 正常
+      - name: Install build tools (Alpine)
+        run: apk add --no-cache build-base git bash
+
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      # 编译时进入 ps2dev 容器执行 make
-      - name: Build inside ps2dev container
-        uses: docker://ps2dev/ps2dev:latest
-        with:
-          args: sh -c "make clean || true && make -j$(nproc)"
-        env:
-          PS2DEV: /usr/local/ps2dev
-          PS2SDK: /usr/local/ps2dev/ps2sdk
-          PS2SDKSRC: /usr/local/ps2dev/ps2sdk/src
+      - name: Build
+        run: |
+          make clean || true
+          make -j$(nproc)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
