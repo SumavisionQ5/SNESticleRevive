@@ -3,6 +3,7 @@ name: Build PS2
 on:
   push:
     branches: [ master, main ]
+    tags: [ 'v*' ]
   pull_request:
   workflow_dispatch:
 
@@ -10,7 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ps2dev/ps2dev:latest   # 基于 Alpine 的官方工具链镜像 [4]
+      image: ps2dev/ps2dev:latest
     env:
       PS2DEV: /usr/local/ps2dev
       PS2SDK: /usr/local/ps2dev/ps2sdk
@@ -30,10 +31,13 @@ jobs:
           make clean || true
           make -j$(nproc)
 
+      - name: List build outputs
+        run: |
+          ls -la build/
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: SNESticleRevive-PS2
-          path: |
-            *.elf
-            *.iso
+          path: build/*.elf
+          if-no-files-found: error
