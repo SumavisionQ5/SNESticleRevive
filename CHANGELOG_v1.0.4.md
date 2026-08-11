@@ -1091,13 +1091,16 @@ Versão exibida pelo programa: **SNESticle Revive PS2 v1.0.4**
 
 - Expandido o core **SuperFX/GSU**, incluindo conjunto de instruções, pipeline,
   cache de código, acesso à ROM/RAM e caminho gráfico `PLOT`/`RPIX`.
-- O backend de vídeo foi reduzido aos modos entrelaçados **480i** e **1080i**;
-  os caminhos instáveis de 240p/288p e 480p foram removidos do GS e do menu.
 - Corrigida a causa de corrupção e flicker da **Issue #19**: texturas do
-  emulador não usam mais endereços fixos que podiam sobrepor um framebuffer
-  físico de 640x480.
-- 480i e 1080i compartilham framebuffer 640x480, fonte em 2x e o mesmo caminho
-  de overscan/widescreen, reduzindo estados especiais no renderer.
+  emulador não usam mais endereços fixos que podiam sobrepor o framebuffer de
+  480p.
+- Refeito o dimensionamento de **240p/288p, 480i, 480p e 1080i**, com
+  framebuffer adequado para cada modo.
+- Corrigida a fonte pequena/comprimida de **240p** relatada na **Issue #26**.
+- A fonte de 240p ganhou um atlas próprio para CRT, com traços verticais de
+  duas scanlines; 480i, 480p e 1080i mantêm o desenho original em 2x.
+- Corrigido o widescreen quebrado de **480p** com uma apresentação `16:9 Safe`
+  que não ultrapassa a janela válida do PCRTC nem lê VRAM fora do framebuffer.
 - Adicionados perfis de cor SNES **Original** e **Composite**, selecionáveis e
   salvos nas configurações.
 - Removido o limite prático de **255/256 itens** do navegador e do CDFS de ISO.
@@ -1165,6 +1168,7 @@ Versão exibida pelo programa: **SNESticle Revive PS2 v1.0.4**
 
 ---
 
+<<<<<<< HEAD
 ## Revisão r17: sprites estáveis e DMA mais rápido
 
 - O blender do GS não entrega mais ao GIF-DMA o mesmo `BlendInfo` que a CPU
@@ -1208,6 +1212,8 @@ Versão exibida pelo programa: **SNESticle Revive PS2 v1.0.4**
 
 ---
 
+=======
+>>>>>>> parent of f70a36f (Remove 240p, 288p and 480p video modes)
 ## Revisão r15: hotfix de ROM, PPU/OAM e SuperFX test 5
 
 ### ROM comum, ZIP e GZ voltam a abrir sem perder a carga rápida
@@ -2095,7 +2101,10 @@ parte do caminho executado.
 
 ## Pontos que ainda exigem teste comunitário
 
-- Confirmar 480i em NTSC/PAL, adaptadores PS2-to-HDMI e NetherSX2.
+- Confirmar 240p/288p e a fonte em CRT real, especialmente nas revisões FAT e
+  Slim citadas nas Issues #19 e #26.
+- Confirmar 480p normal e `16:9 Safe` em componente, PS2-to-HDMI, GSM, OPL e
+  NetherSX2.
 - Confirmar a proporção 4:3 e a opção widescreen em 1080i em diferentes TVs.
 - Abrir `cdfs:/ROMS/`, subpastas e uma ISO com mais de 256 ROMs.
 - Repetir a navegação em `mass0:`, `mass1:`, `mc0:`, `mc1:`, `smb:`, MMCE e

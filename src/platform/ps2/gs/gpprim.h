@@ -15,13 +15,14 @@ void GPPrimUploadTexture(int TBP, int TBW, int xofs, int yofs, int pxlfmt, void 
  * GPPrimTexRect to position coordinates (x,y). UVs are not transformed.
  *
  * Used by the gsKit init path (gskit_backend.c::GSK_Init) to map the
- * legacy 256x240 UI layout onto the 640x480 physical framebuffer. */
+ * legacy 256x240 UI layout onto each mode's physical framebuffer. Native
+ * 240p stays 1:1; higher modes use their mode-specific scale. */
 void GPPrimSetScale(float sx, float sy);
 void GPPrimSetTransform(float sx, float sy, float ox, float oy);
 
 /* Read back the current logical->physical transform. The font path uses
- * it to place an exact 2x glyph draw without fractional NEAREST
- * resampling. */
+ * it to place an exact 1x/2x glyph draw without fractional NEAREST
+ * resampling, including the centred 480p widescreen canvas. */
 float GPPrimGetScaleX(void);
 float GPPrimGetScaleY(void);
 float GPPrimGetOffsetX(void);

@@ -156,11 +156,8 @@ void VideoSettingsLoad(void)
 		if (cfg.mmceenable == 1 && cfg.mx4sioenable == 1)
 			cfg.mx4sioenable = 0;
 
-		/* IDs 0 (240p/288p) and 2 (480p) existed through video.cfg v17.
-		   They are deliberately unsupported now and migrate to safe 480i;
-		   the historical IDs for 480i/1080i remain unchanged. */
-		g_GskVideoMode = (cfg.mode == GSK_VIDMODE_1080I)
-		               ? GSK_VIDMODE_1080I : GSK_VIDMODE_480I;
+		if (cfg.mode >= 0 && cfg.mode < GSK_VIDMODE_COUNT)
+			g_GskVideoMode = cfg.mode;
 
 		if (cfg.offx >= -64 && cfg.offx <= 64) g_GskDispOffX = cfg.offx;
 		if (cfg.offy >= -64 && cfg.offy <= 64) g_GskDispOffY = cfg.offy;
@@ -245,40 +242,24 @@ static const char *_VideoMx4sioStatus()
 	return Mx4sioIsLoaded() ? "On" : "Enabled";
 }
 
-typedef struct
-{
-	Int32 mode;
-	const char *name;
-} VideoModeChoiceT;
-
-static const VideoModeChoiceT _VideoModes[] =
-{
-	{ GSK_VIDMODE_480I,  "480i (default)" },
-	{ GSK_VIDMODE_1080I, "1080i" }
-};
-
-static Int32 _VideoModeIndex(Int32 mode)
-{
-	Int32 i;
-	for (i = 0; i < (Int32)(sizeof(_VideoModes) / sizeof(_VideoModes[0])); i++)
-		if (_VideoModes[i].mode == mode)
-			return i;
-	return 0;
-}
-
 void CVideoScreen::Draw()
 {
+	static const char *names[GSK_VIDMODE_COUNT] = {
+		"240p/288p (CRT)", "480i (default)", "480p", "1080i"
+	};
 	Int32 vy = 15;
 	char  buf[16];
-	int   m = _VideoModeIndex(g_GskVideoMode);
-	const char *pMode = _VideoModes[m].name;
+	int   m = (g_GskVideoMode >= 0 && g_GskVideoMode < GSK_VIDMODE_COUNT)
+	        ? g_GskVideoMode : 0;
+	const char *pMode = names[m];
 	bool  bDevices = (m_iSelect >= 10);  /* pagina 2/2 = dispositivos */
 	const char *pWide = "Off";
 	const char *pColor = (SNPPUColorGetProfile() == SNPPU_COLOR_PROFILE_COMPOSITE)
 	                   ? "Composite" : "Original";
 
 	if (g_GskWidescreen)
-		pWide = "On";
+		pWide = (GSK_GetActiveVideoMode() == GSK_VIDMODE_480P)
+			      ? "16:9 Safe" : "On";
 
 	FontSelect(0);
 
@@ -383,13 +364,9 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 		switch (m_iSelect)
 		{
 		case 0: /* video mode (applied on reboot) */
-			{
-				Int32 count = (Int32)(sizeof(_VideoModes) / sizeof(_VideoModes[0]));
-				Int32 modeIndex = _VideoModeIndex(g_GskVideoMode) + dir;
-				if (modeIndex < 0)      modeIndex = count - 1;
-				if (modeIndex >= count) modeIndex = 0;
-				g_GskVideoMode = _VideoModes[modeIndex].mode;
-			}
+			g_GskVideoMode += dir;
+			if (g_GskVideoMode < 0)                  g_GskVideoMode = GSK_VIDMODE_COUNT - 1;
+			if (g_GskVideoMode >= GSK_VIDMODE_COUNT)  g_GskVideoMode = 0;
 			break;
 
 		case 1: /* widescreen on/off (live) */
