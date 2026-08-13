@@ -834,7 +834,13 @@ Uint8 SnesPPU::Read8(Uint32 uAddr)
 */
 
 
-
+void SnesPPU::SetRegionPAL(Bool bPAL)
+{
+    if (bPAL)
+        m_Regs.stat78 |= 0x10;
+    else
+        m_Regs.stat78 &= ~0x10;
+}
 
 void SnesPPU::BeginFrame()
 {

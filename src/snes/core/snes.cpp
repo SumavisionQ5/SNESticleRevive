@@ -1389,6 +1389,25 @@ void SnesSystem::ExecuteLine()
 
 void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, CMixBuffer *pSound, ModeE eMode)
 {
+Bool bPAL = FALSE;
+
+if (g_SnesForceRegion == SNES_FORCE_REGION_PAL)
+{
+    bPAL = TRUE;
+}
+else
+if (g_SnesForceRegion == SNES_FORCE_REGION_NTSC_U ||
+    g_SnesForceRegion == SNES_FORCE_REGION_NTSC_J)
+{
+    bPAL = FALSE;
+}
+else
+if (m_pRom)
+{
+    bPAL = (m_pRom->m_eVideoType == SNROM_VIDEO_PAL);
+}
+
+m_PPU.SetRegionPAL(bPAL);
     m_uLine = 0;
 
 #if SNDBG_LOG
@@ -1499,7 +1518,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
     m_IO.m_Regs.rdnmi |= 0x80;
     SNCPUSignalNMI(&m_Cpu, m_IO.m_Regs.rdnmi & m_IO.m_Regs.nmitimen & 0x80);
 
-    for ( ; m_uLine < 262; m_uLine++)
+    for ( ; m_uLine < (bPAL ? 312 : 262); m_uLine++)
 	{
 		ExecuteLine();
 

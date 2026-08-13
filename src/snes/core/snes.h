@@ -30,7 +30,7 @@ extern "C" {
 #include "snsrtc.h"
 
 #define SNES_RAMSIZE  0x20000
-#define SNES_SRAMSIZE (256 * 1024)
+#define SNES_SRAMSIZE (512 * 1024)
 
 #define SNES_DSP1 1
 
@@ -102,7 +102,7 @@ private:
 	Bool		m_bSuperFX;   // cartucho usa SuperFX/GSU -> rotear $3000-34FF
 
 	SnesRom		*m_pRom;
-
+Bool            m_bRegionLocked;
 	SnesPPURender	m_PPURender;
 	SNSpcDspMixFull		m_SpcDspMixer;		    // non-deterministic mixer
 	SNSpcDspMixSilent	m_SpcDspSilentMixer;    // deterministic mixer

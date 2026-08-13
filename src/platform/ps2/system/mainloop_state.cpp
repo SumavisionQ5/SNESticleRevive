@@ -193,7 +193,28 @@ Bool _MainLoopSaveSRAM(Bool bSync)
             return FALSE;
         }
         _MainLoopSramBuildPath(Path, sizeof(Path), FALSE);
+Bool bForceSramSizeMismatch = FALSE;
 
+if (_pSystem == _pSnes && g_FakeSRAMSize)
+{
+    struct stat st;
+
+    if (stat(Path, &st) == 0)
+    {
+        if ((Uint32)st.st_size != (Uint32)nSramBytes)
+        {
+            bForceSramSizeMismatch = TRUE;
+
+            printf(
+                "[SRAM] Force SRAM size mismatch: file=%ld expected=%d; ignoring save\n",
+                (long)st.st_size,
+                (int)nSramBytes
+            );
+
+            memset(pSRAM, 0, nSramBytes);
+        }
+    }
+}
         ML_TRACE("SRAM save begin: rom='%s' bytes=%d sync=%d", _RomName, (int)nSramBytes, (int)bSync);
         ML_TRACE("SRAM save path: %s", Path);
         printf("[SRAM] save path='%s' nBytes=%d mcsaveready=%d first16=%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\n",
@@ -252,8 +273,9 @@ Bool _MainLoopSaveSRAM(Bool bSync)
 
 void _MainLoopLoadSRAM()
 {
-    Int32 nSramBytes = _pSystem ? _pSystem->GetSRAMBytes() : 0;
+Int32 nSramBytes = _pSystem ? _pSystem->GetSRAMBytes() : 0;
 
+    Bool bForceSramSizeMismatch = FALSE;
     printf("[SRAM] LoadSRAM enter: pSystem=%p nSramBytes=%d romname='%s'\n",
            (void *)_pSystem, (int)nSramBytes, _RomName);
 
@@ -272,7 +294,12 @@ void _MainLoopLoadSRAM()
         ML_TRACE("SRAM load begin: rom='%s' bytes=%d", _RomName, (int)nSramBytes);
         ML_TRACE("SRAM load path: %s", Path);
 
-        Bool bOk = pSRAM ? MemCardReadFile(Path, pSRAM, nSramBytes) : FALSE;
+Bool bOk = FALSE;
+
+if (!bForceSramSizeMismatch)
+{
+    bOk = pSRAM ? MemCardReadFile(Path, pSRAM, nSramBytes) : FALSE;
+}
         printf("[SRAM] MemCardReadFile -> %d\n", (int)bOk);
 
         /* v1.0.3 and early v1.0.4 builds stored SNES SRAM directly in
@@ -320,7 +347,10 @@ void _MainLoopLoadSRAM()
                 nSramBytes / 4
             );
         }
-        _MainLoop_SRAMUpdated = bLegacyLoaded;
+        if (bForceSramSizeMismatch)
+    _MainLoop_SRAMUpdated = FALSE;
+else
+    _MainLoop_SRAMUpdated = bLegacyLoaded;
     }
 
     _MainLoop_SaveCounter = 0;

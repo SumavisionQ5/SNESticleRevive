@@ -8,7 +8,7 @@
 #include "font.h"
 #include "poly.h"
 #include "uiVideo.h"
-
+#include "snrom.h"
 extern "C" {
 #include "gskit_backend.h"
 }
@@ -238,6 +238,43 @@ static const char *_VideoMmceStatus()
 	return "Not Found";
 }
 
+static const char *_VideoFakeSRAMStatus()
+{
+    switch (g_FakeSRAMSize)
+    {
+case 8:    return "1 KB";
+case 16:   return "2 KB";
+case 32:   return "4 KB";
+case 64:   return "8 KB";
+case 128:  return "16 KB";
+case 256:  return "32 KB";
+case 512:  return "64 KB";
+case 1024: return "128 KB";
+case 2048: return "256 KB";
+case 4096: return "512 KB";
+default:   return "Auto";
+    }
+}
+
+static const char *_VideoForceRegionStatus()
+{
+    switch (g_SnesForceRegion)
+    {
+        case SNES_FORCE_REGION_NTSC_U:
+            return "NTSC-U";
+
+        case SNES_FORCE_REGION_NTSC_J:
+            return "NTSC-J";
+
+        case SNES_FORCE_REGION_PAL:
+            return "PAL";
+
+        case SNES_FORCE_REGION_OFF:
+        default:
+            return "Auto";
+    }
+}
+
 static const char *_VideoMx4sioStatus()
 {
 	if (!Mx4sioIsEnabled())       return "Off";
@@ -340,6 +377,15 @@ void CVideoScreen::Draw()
 		          SmbGetStatusText()); vy += 12;
 		_VideoRow(vy, 14, m_iSelect, "MX4SIO (SD)",
 		          _VideoMx4sioStatus()); vy += 12;
+
+_VideoHeader(vy, "Misc."); vy += 14;
+
+_VideoRow(vy, 15, m_iSelect, "SRAM Size",
+          _VideoFakeSRAMStatus()); vy += 12;
+
+_VideoRow(vy, 16, m_iSelect, "Force Region",
+          _VideoForceRegionStatus()); vy += 12;
+
 	}
 
 	/* controls / hints (clear of the vy=215 footer) */
@@ -372,7 +418,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 
 	{
 		int lo = (m_iSelect >= 10) ? 10 : 0;
-		int hi = (m_iSelect >= 10) ? 14 : 9;
+		int hi = (m_iSelect >= 10) ? 16 : 9;
 		if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < lo) m_iSelect = hi; }
 		if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > hi) m_iSelect = lo; }
 	}
@@ -498,7 +544,106 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 				BgmIOEnd();
 			}
 			break;
+
+case 15: /* SRAM Size */
+    switch (g_FakeSRAMSize)
+    {
+        case 0:
+            g_FakeSRAMSize = (dir > 0) ? 8 : 4096;
+            break;
+
+        case 8:
+            g_FakeSRAMSize = (dir > 0) ? 16 : 0;
+            break;
+
+        case 16:
+            g_FakeSRAMSize = (dir > 0) ? 32 : 8;
+            break;
+
+        case 32:
+            g_FakeSRAMSize = (dir > 0) ? 64 : 16;
+            break;
+
+        case 64:
+            g_FakeSRAMSize = (dir > 0) ? 128 : 32;
+            break;
+
+        case 128:
+            g_FakeSRAMSize = (dir > 0) ? 256 : 64;
+            break;
+
+        case 256:
+            g_FakeSRAMSize = (dir > 0) ? 512 : 128;
+            break;
+
+        case 512:
+            g_FakeSRAMSize = (dir > 0) ? 1024 : 256;
+            break;
+
+        case 1024:
+            g_FakeSRAMSize = (dir > 0) ? 2048 : 512;
+            break;
+
+        case 2048:
+            g_FakeSRAMSize = (dir > 0) ? 4096 : 1024;
+            break;
+
+        case 4096:
+        default:
+            g_FakeSRAMSize = (dir > 0) ? 0 : 2048;
+            break;
+    }
+    break;
+
+case 16: /* Force Region */
+    if (dir > 0)
+    {
+        switch (g_SnesForceRegion)
+        {
+            case SNES_FORCE_REGION_OFF:
+                g_SnesForceRegion = SNES_FORCE_REGION_NTSC_U;
+                break;
+
+            case SNES_FORCE_REGION_NTSC_U:
+                g_SnesForceRegion = SNES_FORCE_REGION_NTSC_J;
+                break;
+
+            case SNES_FORCE_REGION_NTSC_J:
+                g_SnesForceRegion = SNES_FORCE_REGION_PAL;
+                break;
+
+            case SNES_FORCE_REGION_PAL:
+            default:
+                g_SnesForceRegion = SNES_FORCE_REGION_OFF;
+                break;
+        }
+    }
+    else
+    {
+        switch (g_SnesForceRegion)
+        {
+            case SNES_FORCE_REGION_OFF:
+                g_SnesForceRegion = SNES_FORCE_REGION_PAL;
+                break;
+
+            case SNES_FORCE_REGION_NTSC_U:
+                g_SnesForceRegion = SNES_FORCE_REGION_OFF;
+                break;
+
+            case SNES_FORCE_REGION_NTSC_J:
+                g_SnesForceRegion = SNES_FORCE_REGION_NTSC_U;
+                break;
+
+            case SNES_FORCE_REGION_PAL:
+            default:
+                g_SnesForceRegion = SNES_FORCE_REGION_NTSC_J;
+                break;
+        }
+    }
+    break;
 		}
+
+
 	}
 
 	/* Square: reset the display offset (live). */
