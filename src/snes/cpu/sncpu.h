@@ -74,7 +74,15 @@ typedef struct SNCpu_t
 	Int32				nAbortCycles;
 	Bool				bRunning;
 	Uint8				uSignal;
-	Uint8				uPad;
+	/* Remaining master clocks before an NMI captured during MDMA may enter.
+	   This reuses the old padding byte, so the PS2 assembly layout is stable. */
+	Uint8				uNmiDmaDelay;
+
+#if defined(SNCPU_TEST) && SNCPU_TEST
+	/* Host-only instruction-vector accounting.  Kept out of release builds so
+	   the hand-written PS2 assembly layout remains unchanged. */
+	Uint32				uTestCycles;
+#endif
 
 	SNCpuBankT			Bank[SNCPU_BANK_NUM];			// cpu memory banks
 
@@ -99,6 +107,7 @@ void SNCPUSetBank(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, Uint8 *pMem, Bool bRAM
 void SNCPUSetTrap(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, SNCpuReadTrapFuncT pReadTrap, SNCpuWriteTrapFuncT pWriteTrap);
 void SNCPUSetMemSpeed(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, Uint32 uCycles);
 void SNCPUSetRomSpeed(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, Uint32 uCycles);
+void SNCPUMirror24BitBus(SNCpuT *pCpu);
 
 Uint8  SNCPUPeek8(SNCpuT *pCpu, Uint32 Addr);
 void   SNCPUPeekMem(SNCpuT *pCpu, Uint32 Addr, Uint8 *pBuffer, Uint32 nBytes);

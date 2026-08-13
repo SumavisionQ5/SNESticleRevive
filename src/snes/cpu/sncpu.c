@@ -20,6 +20,8 @@
 static Int32 _SNCPUDefaultExecuteFunc(SNCpuT *pCpu);
 static Uint8 SNCPU_TRAPFUNC _SNCPUDefaultRead(SNCpuT *pCpu, Uint32 Addr);
 static void SNCPU_TRAPFUNC _SNCPUDefaultWrite(SNCpuT *pCpu, Uint32 Addr, Uint8 Data);
+static Uint8 SNCPU_TRAPFUNC _SNCPUWrap24Read(SNCpuT *pCpu, Uint32 Addr);
+static void SNCPU_TRAPFUNC _SNCPUWrap24Write(SNCpuT *pCpu, Uint32 Addr, Uint8 Data);
 
 
 //
@@ -92,6 +94,7 @@ void SNCPUReset(SNCpuT *pCpu, Bool bHardReset)
 
 	// no IRQ
 	pCpu->uSignal = 0;
+	pCpu->uNmiDmaDelay = 0;
 
 	// set cpu flags to default state
 	pCpu->Regs.rP  = SNCPU_FLAG_M | SNCPU_FLAG_X |  SNCPU_FLAG_I;
@@ -229,6 +232,44 @@ void SNCPUSetRomSpeed(SNCpuT *pCpu, Uint32 Addr, Uint32 Size, Uint32 uCycles)
 		iBank++;
 		nBanks--;
 	}
+}
+
+/* Effective addresses such as $FF:FFFF,X may carry into $100:xxxx before
+   reaching the memory helpers.  The 65816 has only a 24-bit address bus, so
+   that carry wraps to bank $00.  SNCPU_MEM_SIZE deliberately reserves one
+   extra 64 KiB for this case; mirror the eight bank descriptors for $00 here
+   so the hot ASM memory path gets the wrap without adding a mask to every
+   read/write. */
+void SNCPUMirror24BitBus(SNCpuT *pCpu)
+{
+	Uint32 i;
+	const Uint32 uBusBytes = 0x1000000;
+	const Uint32 iMirror = uBusBytes >> SNCPU_BANK_SHIFT;
+	const Uint32 nBanks = 0x10000 >> SNCPU_BANK_SHIFT;
+
+	for (i = 0; i < nBanks; i++)
+	{
+		pCpu->Bank[iMirror + i] = pCpu->Bank[i];
+		if (pCpu->Bank[iMirror + i].pMem)
+			pCpu->Bank[iMirror + i].pMem -= uBusBytes;
+		else
+			pCpu->Bank[iMirror + i].pReadTrapFunc = _SNCPUWrap24Read;
+
+		/* ROM and I/O descriptors can have a direct read pointer but still use
+		   their write trap.  Route every trapped overflow write through the
+		   wrapped address as well. */
+		pCpu->Bank[iMirror + i].pWriteTrapFunc = _SNCPUWrap24Write;
+	}
+}
+
+static Uint8 SNCPU_TRAPFUNC _SNCPUWrap24Read(SNCpuT *pCpu, Uint32 Addr)
+{
+	return SNCPURead8(pCpu, Addr & 0xFFFFFF);
+}
+
+static void SNCPU_TRAPFUNC _SNCPUWrap24Write(SNCpuT *pCpu, Uint32 Addr, Uint8 Data)
+{
+	SNCPUWrite8(pCpu, Addr & 0xFFFFFF, Data);
 }
 
 
@@ -495,8 +536,7 @@ void SNCPUNMI(SNCpuT *pCpu)
 	// are we stopped at a WAI instruction?
 	if (pCpu->uSignal & SNCPU_SIGNAL_WAI)
 	{
-		// skip it
-		pCpu->Regs.rPC++;
+		/* WAI has already advanced PC to the following instruction. */
 		pCpu->uSignal &= ~SNCPU_SIGNAL_WAI;
 	}
 
@@ -520,13 +560,24 @@ void SNCPUNMI(SNCpuT *pCpu)
 	}
 
 	pCpu->Regs.rP &= ~(SNCPU_FLAG_D);
+	pCpu->Regs.rP |= SNCPU_FLAG_I;
 
-	SNCPUConsumeCycles(pCpu, SNCPU_CYCLE_SLOW * 6 + SNCPU_CYCLE_FAST * 2);
+	SNCPUConsumeCycles(pCpu,
+		SNCPU_CYCLE_SLOW * (pCpu->Regs.rE ? 5 : 6) +
+		SNCPU_CYCLE_FAST * 2);
 }
 
 
 void SNCPUIRQ(SNCpuT *pCpu)
 {
+	/* Any asserted IRQ releases WAI, even when I masks entry into the IRQ
+	   handler.  The old placement inside the !I block could leave the CPU
+	   asleep forever on a masked interrupt. */
+	if (pCpu->uSignal & SNCPU_SIGNAL_WAI)
+	{
+		pCpu->uSignal &= ~SNCPU_SIGNAL_WAI;
+	}
+
 	if (!(pCpu->Regs.rP & SNCPU_FLAG_I))
 	{
 #if SNES_DEBUG
@@ -535,14 +586,6 @@ void SNCPUIRQ(SNCpuT *pCpu)
 #endif
 
         
-        // are we stopped at a WAI instruction?
-		if (pCpu->uSignal & SNCPU_SIGNAL_WAI)
-		{
-			// skip it
-			pCpu->Regs.rPC++;
-			pCpu->uSignal &= ~SNCPU_SIGNAL_WAI;
-		}
-
 		if (pCpu->Regs.rE)
 		{
 			// emulation
@@ -565,7 +608,9 @@ void SNCPUIRQ(SNCpuT *pCpu)
 		pCpu->Regs.rP &= ~(SNCPU_FLAG_D);
 		pCpu->Regs.rP |= SNCPU_FLAG_I;
 
-		SNCPUConsumeCycles(pCpu, SNCPU_CYCLE_SLOW * 6 + SNCPU_CYCLE_FAST * 2);
+		SNCPUConsumeCycles(pCpu,
+			SNCPU_CYCLE_SLOW * (pCpu->Regs.rE ? 5 : 6) +
+			SNCPU_CYCLE_FAST * 2);
 	}
 }
 
@@ -766,7 +811,7 @@ void SNCPUSignalNMI(SNCpuT *pCpu, Uint32 bEnable)
     // NMIs are edge triggered. 
     // If the signal transitions from 0 -> 1 then the NMIEDGE flag becomes set.
     // When NMIEDGE is set, a cpu nmi will trigger with a one instruction delay.
-    // If the NMI signal is set to 0, NMIEDGE is cleared.
+    // Lowering the input does not cancel an edge already latched by the CPU.
     // 
 	if (bEnable)
 	{
@@ -774,13 +819,18 @@ void SNCPUSignalNMI(SNCpuT *pCpu, Uint32 bEnable)
 		{
 			// trigger NMI on lo->hi transition
 			pCpu->uSignal |= SNCPU_SIGNAL_NMIEDGE;
+			/* On the S-CPU, an NMI edge captured while MDMA owns the bus is
+			   held until DMA ends, followed by a 24-30 master-clock recovery
+			   delay.  Wild Guns depends on this ordering. */
+			if (pCpu->uSignal & SNCPU_SIGNAL_DMA)
+				pCpu->uNmiDmaDelay = 24;
             // if we're currently running abort so NMI can happen now
 			SNCPUAbort(pCpu);
 		}
 		pCpu->uSignal |= SNCPU_SIGNAL_NMI;
 	} else
 	{
-		pCpu->uSignal &= ~(SNCPU_SIGNAL_NMI | SNCPU_SIGNAL_NMIEDGE);
+		pCpu->uSignal &= ~SNCPU_SIGNAL_NMI;
 	}
 }
 

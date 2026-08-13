@@ -1076,7 +1076,7 @@ executed path.
 
 Changelog acumulado da versão 1.0.4, comparado com a tag **v1.0.3**.
 
-Data deste pacote de teste: **9 de agosto de 2026**
+Data deste pacote de teste: **12 de agosto de 2026**
 
 Versão exibida pelo programa: **SNESticle Revive PS2 v1.0.4**
 
@@ -1165,6 +1165,77 @@ Versão exibida pelo programa: **SNESticle Revive PS2 v1.0.4**
   prender o menu, a música e o carregamento de ROM.
 - A paleta antiga e excessivamente saturada do InfoNES foi substituída pela
   paleta NTSC 2C02 padrão do **Mesen2**, preservada em RGBA8.
+- O 65816 e o controlador DMA/HDMA foram auditados contra o **MesenCE/Mesen2** e os
+  5,12 milhões de vetores do SingleStepTests; CPU, interrupções, pilha, wrap e
+  timing de HDMA receberam correções independentes do renderer de sprites.
+
+---
+
+## Revisão r19: CPU 65816 completa, IRQ/NMI e DMA/HDMA alinhados
+
+- A bancada `tools/cputest` agora importa estado final, RAM e quantidade de
+  ciclos dos **512 arquivos** do `SingleStepTests/65816`: 10.000 casos por
+  opcode em emulação e 10.000 em modo nativo, totalizando **5.120.000**.
+  Todos os **5.080.000 casos que não são block-move** passam sem divergência.
+  `MVN/MVP` continuam deliberadamente byte a byte, como no Mesen, para que uma
+  interrupção possa ocorrer entre bytes; a bancada própria valida a sequência,
+  PC e sete ciclos por byte.
+- Corrigidos o registrador Direct Page em emulação, wrap/indexação de DP,
+  penalidades de página e ciclo, fetch de PC dentro do Program Bank, branches,
+  operandos de 16/24 bits e o wrap físico do barramento de 24 bits.
+- `ADC/SBC` decimal de 8 e 16 bits usa o mesmo resultado no core C e no ASM,
+  inclusive para dígitos BCD inválidos. `BRK`, `COP`, `WDM`, entrada/saída de
+  emulação e truncamento de X/Y também foram alinhados aos vetores.
+- A pilha ganhou as sequências específicas de `PLB`, `PHD/PLD`, `PEA/PEI/PER`,
+  `JSL/RTL` e `JSR (abs,X)`. Os últimos casos encontrados pela rodada completa
+  — `PEI` em `$xxFF`, `(dp,X)` no fim da página e push de `JSR` cruzando
+  `$0100` — têm testes oficiais reproduzíveis e agora passam.
+- `WAI` deixa o PC no opcode seguinte e acorda mesmo com IRQ mascarada; `STP`
+  mantém a CPU parada até reset. Uma NMI já capturada não é cancelada por uma
+  leitura de `$4210`, e IRQ que estava mascarada entra imediatamente depois de
+  `CLI`, `REP`, `PLP` ou `RTI`, sem esperar o fim da fatia de scanline.
+- NMI/IRQ agora ajustam I/D e ciclos diferentes de emulação/nativo. A posição
+  do H/V-IRQ inclui o atraso do comparador/pipeline, e NMI capturada durante
+  MDMA espera os 24 master clocks posteriores ao DMA documentados pelo Snes9x;
+  esse caso cita especificamente **Wild Guns** e Mighty Morphin Power Rangers.
+- O HDMA foi refeito na ordem de duas fases do Mesen: primeiro todos os dados,
+  depois todos os contadores/tabelas. Canais encerrados por `00` permanecem
+  parados no frame, modo 5 transfere quatro bytes, direção B→A funciona,
+  endereços ficam no banco correto e leituras/custos obrigatórios de oito
+  clocks não são mais omitidos. O padrão de porta B do MDMA reverso também não
+  reinicia quando uma fatia termina depois do byte 1, 2 ou 3.
+- As mudanças são de CPU/barramento e não reabrem o renderer OBJ já testado.
+  **Final Fight 2 e Wild Guns ainda precisam de confirmação visual no
+  NetherSX2/PS2**; esta revisão não declara os dois resolvidos sem esse reteste.
+
+---
+
+## Revisão r18: wrap real do 65816 e build normal sem diagnóstico residual
+
+- A comparação com o Mesen e uma bancada diferencial descartou os dois
+  suspeitos anteriores: o DMA de 544 bytes chega idêntico da WRAM à OAM e o
+  caminho em bloco de `$2118/$2119` produz a mesma VRAM, endereço e latch que
+  as escritas alternadas byte a byte em todos os modos de `VMAIN` testados.
+- Foi encontrada uma diferença reproduzível no 65816: endereços efetivos que
+  carregavam além de `$FF:FFFF` acessavam a página extra vazia do core, embora
+  o barramento físico de 24 bits deva voltar para `$00:0000`. A página extra de
+  64 KiB agora espelha os oito descritores do banco `$00`, inclusive MMIO e
+  writes presos em trap, que recebem o endereço já limitado a 24 bits.
+- Os casos de `LDA abs,X` e `LDA abs,Y` que cruzam o limite passaram de falhas
+  reproduzíveis para **10.000/10.000** vetores oficiais em cada opcode. Uma
+  rodada adicional de 440 mil vetores nativos de load/store deixou apenas os
+  casos já conhecidos do executor C quando a própria instrução começa em
+  `$FFFD/$FFFE`; o núcleo ASM do PS2 preserva o banco do PC nesse caminho.
+- `tools/cputest` ganhou uma bancada host para o espelho de leitura, escrita e
+  MMIO de 24 bits, além do adaptador para os vetores oficiais do 65816.
+- O `Makefile` agora guarda o modo de compilação. Ao voltar de
+  `SNES_DIAGNOSTICS=1` ou `PROFILE=1` para um `make iso` normal, todos os
+  objetos afetados são recompilados com os contadores desligados. Builds
+  normais consecutivas continuam incrementais.
+- Esta é uma correção de CPU comprovada e um candidato novo para os tiles de
+  personagens corrompidos. A cena de Final Fight 2 continua **pendente de
+  confirmação visual no NetherSX2/PS2**; não é anunciada como resolvida sem o
+  reteste da ROM.
 
 ---
 
