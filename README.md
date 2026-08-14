@@ -21,7 +21,7 @@ Keep in mind: this fork uses **AI-generated code** but it's always tested by me,
 
 **TO BE FIXED:**
 
-* "Browser SRAM files" *currently not working properly, files won't show yet*
+* "Browse SRAM files" *currently not working properly, files won't show yet*
 * "Reset the emulator" *currently not working properly, it resets the console*
 
 **TO BE ADDED:**
