@@ -15,8 +15,13 @@ Original project and credits belong to the respective authors. See LICENSE for l
 * Changed SRAM and RAM initialization to fix a few FC games that rely on specific initial values
 * Turbo B/A for NES games
 * Exit to Browser
-* Region selector
-* Select SRAM size (trigger the anti-piracy screens/measures!)
+* Region selector (trigger region-lock screens)
+* Select SRAM size (trigger the anti-piracy screens/measures)
+
+**TO BE FIXED:**
+
+* "Browser SRAM files" *currently not working properly, files won't show yet*
+* "Reset the emulator" *currently not working properly, it resets the console*
 
 **TO BE ADDED:**
 

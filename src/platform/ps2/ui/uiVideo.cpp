@@ -386,7 +386,7 @@ _VideoRow(vy, 15, m_iSelect, "SRAM Size",
 _VideoRow(vy, 16, m_iSelect, "Force Region",
           _VideoForceRegionStatus()); vy += 12;
 
-_VideoRow(vy, 17, m_iSelect, "Exit to Browser", "X"); vy += 12;
+_VideoRow(vy, 17, m_iSelect, "Reset emulator", ""); vy += 12;
 
 	}
 
