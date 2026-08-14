@@ -10,13 +10,16 @@ Original project and credits belong to the respective authors. See LICENSE for l
 
 **FEATURES ADDED:**
 
-* Fixes and improvements for 240p display mode *(pulled to main)*
-* "Dirty fix" for font rendering in 240p (a better fix should be implemented in the future) *(pulled to main)*
-* Changed SRAM and RAM initialization to fix a few FC games that rely on specific initial values *(pulled to main)*
-* Turbo B/A for NES games *(pulled to main)*
+* Fixes and improvements for 240p display mode
+* "Dirty fix" for font rendering in 240p (a better fix should be implemented in the future)
+* Changed SRAM and RAM initialization to fix a few FC games that rely on specific initial values
+* Turbo B/A for NES games
+* Exit to Browser
 * Region selector
 * Select SRAM size (trigger the anti-piracy screens/measures!)
 
 **TO BE ADDED:**
 
+* Similar SRAM and RAM initialization for SNES, but I don't know any games that rely on specific initial values yet
 * Other stupid (or not-so-stupid) ideas I might come up with. Thanks!
+

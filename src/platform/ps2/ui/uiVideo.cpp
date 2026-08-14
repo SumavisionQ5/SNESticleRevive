@@ -386,6 +386,8 @@ _VideoRow(vy, 15, m_iSelect, "SRAM Size",
 _VideoRow(vy, 16, m_iSelect, "Force Region",
           _VideoForceRegionStatus()); vy += 12;
 
+_VideoRow(vy, 17, m_iSelect, "Exit to Browser", "X"); vy += 12;
+
 	}
 
 	/* controls / hints (clear of the vy=215 footer) */
@@ -418,7 +420,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 
 	{
 		int lo = (m_iSelect >= 10) ? 10 : 0;
-		int hi = (m_iSelect >= 10) ? 16 : 9;
+		int hi = (m_iSelect >= 10) ? 17 : 9;
 		if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < lo) m_iSelect = hi; }
 		if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > hi) m_iSelect = lo; }
 	}
@@ -654,9 +656,14 @@ case 16: /* Force Region */
 		GSK_SetDisplayOffset(0, 0);
 	}
 
-	/* Cross / Start: persist all video settings to the memory card. */
-	if (trigger & (PAD_CROSS | PAD_START))
-	{
-		VideoSettingsSave();
-	}
+/* Cross / Start: persist all video settings to the memory card. */
+if (trigger & (PAD_CROSS | PAD_START))
+{
+    VideoSettingsSave();
+
+    if (m_iSelect == 17)
+    {
+        ExecOSD(0, NULL);
+    }
+}
 }

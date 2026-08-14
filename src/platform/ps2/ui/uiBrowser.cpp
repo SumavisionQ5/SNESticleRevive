@@ -21,6 +21,7 @@
 #endif
 #include "poly.h"
 #include "uiBrowser.h"
+#include "mainloop_menu.h"
 #include "uiCover.h"
 #include "mainloop_bgm.h"
 #include "mainloop_smb.h"
@@ -1509,10 +1510,16 @@ void CBrowserScreen::Input(Uint32 buttons, Uint32 trigger)
 		m_iScroll = m_iSelect - m_MaxLines + 1;
 	}
 
-	if (trigger & PAD_TRIANGLE)
-    {
-        Chdir("..");
-    }
+if (trigger & PAD_TRIANGLE)
+{
+if (m_bStateManager)
+{
+    _MainLoopStateBrowserReturn();
+    return;
+}
+
+    Chdir("..");
+}
 
 	if (trigger & (PAD_CROSS | PAD_START))
 	{
