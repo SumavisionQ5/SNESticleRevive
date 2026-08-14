@@ -18,11 +18,10 @@ Keep in mind: this fork uses **AI-generated code** but it's always tested by me,
 * Turbo B/A for NES games
 * Region selector (trigger region-lock screens)
 * Select SRAM size (trigger the anti-piracy screens/measures)
+* Browse SRAM files
 
 **TO BE FIXED:**
-
-* "Browse SRAM files" *currently not working properly, files won't show yet*
-* "Reset the emulator" *currently not working properly, it resets the console*
+* Option to eset the emulator *(currently not working properly, it resets the whole console instead)*
 
 **TO BE ADDED:**
 
