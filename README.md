@@ -21,7 +21,7 @@ Keep in mind: this fork uses **AI-generated code** but it's always tested by me,
 * Browse SRAM files
 
 **TO BE FIXED:**
-* Option to eset the emulator *(currently not working properly, it resets the whole console instead)*
+* Option to reset the emulator *(currently not working, it resets the whole console instead)*
 
 **TO BE ADDED:**
 
