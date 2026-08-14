@@ -13,11 +13,11 @@ Keep in mind: this fork uses **AI-generated code** but it's always tested by me,
 **FEATURES ADDED:**
 
 * Fixes and improvements for 240p display mode
-* "Dirty fix" for font rendering in 240p (a better fix should be implemented in the future)
+* "Dirty fix" for font rendering in 240p *(a better fix should be implemented in the future)*
 * Changed SRAM and RAM initialization to fix a few FC games that rely on specific initial values
 * Turbo B/A for NES games
-* Region selector (trigger region-lock screens)
-* Select SRAM size (trigger the anti-piracy screens/measures)
+* Region selector (to intentionally trigger region-lock screens)
+* Select SRAM size (to intentionally trigger anti-piracy screens and measures)
 * Browse SRAM files
 
 **TO BE FIXED:**
