@@ -346,8 +346,8 @@ static const char *_VideoMmceStatus()
 
 static const char *_VideoFakeSRAMStatus()
 {
-    switch (g_FakeSRAMSize)
-    {
+   switch (g_FakeSRAMSize)
+{
 case 8:    return "1 KB";
 case 16:   return "2 KB";
 case 32:   return "4 KB";
@@ -357,9 +357,8 @@ case 256:  return "32 KB";
 case 512:  return "64 KB";
 case 1024: return "128 KB";
 case 2048: return "256 KB";
-case 4096: return "512 KB";
 default:   return "Auto";
-    }
+}
 }
 
 static const char *_VideoForceRegionStatus()

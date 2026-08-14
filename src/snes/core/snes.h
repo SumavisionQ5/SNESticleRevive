@@ -30,7 +30,7 @@ extern "C" {
 #include "snsrtc.h"
 
 #define SNES_RAMSIZE  0x20000
-#define SNES_SRAMSIZE (512 * 1024)
+#define SNES_SRAMSIZE (256 * 1024)
 
 #define SNES_DSP1 1
 
