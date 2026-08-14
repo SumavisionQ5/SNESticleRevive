@@ -64,25 +64,23 @@ PACK       ?= 1
 
 IRX_DIR     ?= $(PS2SDK)/iop/irx
 
-# DEBUG_BOOT_SCREEN: when set to 1 the EE side calls init_scr() in main()
-# and every "[boot] ..." trace point goes to scr_printf() (BIOS debug
-# font, written direct to the GS, no IOP/SIF/host: round-trip needed).
-# In that mode MainLoopInit() also skips its own GS_InitGraph() so the
-# debug screen survives long enough for the user to read it. Set to 0
-# for normal rendering. Override on the make line if needed.
-DEBUG_BOOT_SCREEN ?= 0
-
-# MAINLOOP_DEBUG_GS_TEST: when set to 1, MainLoopRender() paints the
-# whole frame solid red as the first thing every frame. Use to confirm
-# whether the GS pipeline itself is alive (red = OK, still black = GS
-# broken). Override on the make line: `make MAINLOOP_DEBUG_GS_TEST=1`.
-MAINLOOP_DEBUG_GS_TEST ?= 0
-
-# SNES_DIAGNOSTICS=1 enables the once-per-second CPU/PPU/GSU/OBJ counters
-# used by the v1.0.4 investigation. Keep it off for normal gameplay: the
-# per-instruction GSU counters are useful for profiling but are themselves
-# measurable work on the EE.
+# SNES_DIAGNOSTICS=1 enables the low-overhead, once-per-second general
+# CPU/PPU/GS report.  SNES_DIAGNOSTICS=2 also enables deep OBJ/DMA hashes,
+# per-scanline staging validation and per-instruction GSU counters.  Keep the
+# deep mode for short captures because its probes are measurable work on EE.
 SNES_DIAGNOSTICS ?= 0
+SNES_DIAG_ENABLED := $(if $(filter-out 0,$(SNES_DIAGNOSTICS)),1,0)
+SNES_DIAG_DEEP := $(if $(filter 2,$(SNES_DIAGNOSTICS)),1,0)
+
+# Cache CHR fisico compartilhado: OBJ 4bpp consulta diretamente o tile
+# decodificado e a escrita da VRAM invalida a entrada correspondente.
+# SNES_OBJ_CACHE=0 existe somente para comparacao A/B de desempenho.
+SNES_OBJ_CACHE ?= 1
+
+# No Top Gear, o log r27 mostrou que o cache BG aumentou o custo mesmo com
+# 100% de hits. O renderer original volta a ser o padrao para BG; o switch
+# continua disponivel somente para comparacao A/B.
+SNES_BG_CACHE ?= 0
 
 # Conservative flags to bridge the GCC 3.2 (2003) -> GCC 15.1 (2025)
 # gap in default optimization behavior. The original iaddis source was
@@ -111,15 +109,15 @@ CONSERVATIVE_FLAGS := \
 
 CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
-	-DSNDBG_LOG=$(SNES_DIAGNOSTICS) \
-	-DDEBUG_BOOT_SCREEN=$(DEBUG_BOOT_SCREEN) \
-	-DMAINLOOP_DEBUG_GS_TEST=$(MAINLOOP_DEBUG_GS_TEST)
+	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
+	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
+	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE)
 
 CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fno-exceptions -fno-rtti -fpermissive \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
-	-DSNDBG_LOG=$(SNES_DIAGNOSTICS) \
-	-DDEBUG_BOOT_SCREEN=$(DEBUG_BOOT_SCREEN) \
-	-DMAINLOOP_DEBUG_GS_TEST=$(MAINLOOP_DEBUG_GS_TEST)
+	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
+	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
+	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE)
 
 # The official libxmp-lite embedded/core configuration keeps the MOD/XM effect
 # and loop engines while omitting desktop-only depackers and format extras,
@@ -453,7 +451,6 @@ SRCS := \
 	src/common/debug/dbgterm.cpp \
 	src/platform/ps2/system/mainloop_state.cpp \
 	src/platform/ps2/system/mainloop_iop.cpp \
-	src/platform/ps2/system/boot_status.cpp \
 	src/platform/ps2/system/mainloop_net.cpp \
 	src/platform/ps2/system/mainloop_smb.cpp \
 	src/platform/ps2/system/mainloop_ui.cpp \
@@ -634,7 +631,7 @@ FORCE_COMPILE_MODE:
 
 $(BUILD_CONFIG_FILE): FORCE_COMPILE_MODE | $(OBJ_DIR)
 	@mkdir -p "$(BUILD_META_DIR)"; \
-	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) PROFILE=$(PROFILE) DSP4_CAPTURE=$(DSP4_CAPTURE) DSP4_STUB=$(DSP4_STUB)'; \
+	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) PROFILE=$(PROFILE) DSP4_CAPTURE=$(DSP4_CAPTURE) DSP4_STUB=$(DSP4_STUB)'; \
 	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$@"; \
 	fi
@@ -1334,7 +1331,10 @@ help:
 	printf "  SHOW_WARN_LOG=1              Print full warning logs\n"; \
 	printf "  VERBOSE=1                    Show full warning AND error text (no truncation)\n"; \
 	printf "  PROFILE=1                    Enable on-screen profiler (press R3 in-game)\n"; \
-	printf "  SNES_DIAGNOSTICS=1           Enable once-per-second SNES/GSU debug counters\n"; \
+	printf "  SNES_DIAGNOSTICS=1           Low-overhead general SNES/GS performance report\n"; \
+	printf "  SNES_DIAGNOSTICS=2           Deep OBJ/DMA/GSU capture (measurable overhead)\n"; \
+	printf "  SNES_OBJ_CACHE=0             Disable shared CHR cache for OBJ A/B only\n"; \
+	printf "  SNES_BG_CACHE=1              Enable experimental BG CHR cache for A/B only\n"; \
 	printf "  OUT=/path                    Copy final ELF to this folder\n"; \
 	printf "  out=/path                    Same as OUT=/path\n"; \
 	printf "  ROMS=/path                   ROM folder for ISO build\n"; \

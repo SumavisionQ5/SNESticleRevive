@@ -11,6 +11,7 @@
 #include "snmask.h"
 #include "snmaskop.h"
 #include "prof.h"
+#include "sndbglog.h"
 
 
 
@@ -409,6 +410,9 @@ Uint32 SnesPPURender::FetchBG(SnesBGInfoT *pBGInfo, struct SnesRenderTileT *pTil
 
 		if (uVramAddr != (uOldVramAddr&0xFFFF))
 		{
+#if SNDBG_LOG
+			g_DbgBGMapReloads++;
+#endif
 			// get pointers to screens
 			_GetScreenPtrs(pScreen, m_pPPU, pBGInfo->uScrAddr, pBGInfo->uScrSize);
 
@@ -438,6 +442,9 @@ Uint32 SnesPPURender::FetchBG(SnesBGInfoT *pBGInfo, struct SnesRenderTileT *pTil
 
 		if (uVramAddr != (uOldVramAddr&0xFFFF))
 		{
+#if SNDBG_LOG
+			g_DbgBGMapReloads++;
+#endif
 			// get pointers to screens
 			_GetScreenPtrs(pScreen, m_pPPU, pBGInfo->uScrAddr, pBGInfo->uScrSize);
 
@@ -474,6 +481,10 @@ Uint32 SnesPPURender::FetchBGOffset(SnesBGInfoT *pBGInfo, struct SnesRenderTileT
 		// no fetching
 		return 0;
 	}
+
+#if SNDBG_LOG
+	g_DbgBGMapReloads++;
+#endif
 
 	// perform BG line caching
 	switch(pBGInfo->uChrSize)
@@ -633,35 +644,35 @@ void SnesPPURender::DecodeBGInfo(SnesBGInfoT *pBGInfo)
 	   BG layers and add a large amount of useless tile work. */
 	memset(pBGInfo, 0, sizeof(*pBGInfo) * 4);
 
-	pBGInfo[0].uScrollX = pRegs->bg1hofs.w & 0x7FF;
-	pBGInfo[0].uScrollY = pRegs->bg1vofs.w & 0x7FF;
+	pBGInfo[0].uScrollX = pRegs->bg1hofs.w & 0x3FF;
+	pBGInfo[0].uScrollY = pRegs->bg1vofs.w & 0x3FF;
 	pBGInfo[0].uScrAddr = (pRegs->bg1sc >> 2) << 10;
 	pBGInfo[0].uScrSize =  pRegs->bg1sc & 3;
-	pBGInfo[0].uChrAddr =  ((pRegs->bg12nba >> 0) & 0xF) << 12;
+	pBGInfo[0].uChrAddr =  ((pRegs->bg12nba >> 0) & 0x7) << 12;
 	pBGInfo[0].uChrSize =  (pRegs->bgmode >> 4) & 1;
 	pBGInfo[0].uMosaic  = (pRegs->mosaic&1) ? (pRegs->mosaic>>4) : 0;
 
-	pBGInfo[1].uScrollX = pRegs->bg2hofs.w & 0x7FF;
-	pBGInfo[1].uScrollY = pRegs->bg2vofs.w & 0x7FF;
+	pBGInfo[1].uScrollX = pRegs->bg2hofs.w & 0x3FF;
+	pBGInfo[1].uScrollY = pRegs->bg2vofs.w & 0x3FF;
 	pBGInfo[1].uScrAddr = (pRegs->bg2sc >> 2) << 10;
 	pBGInfo[1].uScrSize =  pRegs->bg2sc & 3;
-	pBGInfo[1].uChrAddr =  ((pRegs->bg12nba >> 4) & 0xF) << 12;
+	pBGInfo[1].uChrAddr =  ((pRegs->bg12nba >> 4) & 0x7) << 12;
 	pBGInfo[1].uChrSize =  (pRegs->bgmode >> 5) & 1;
 	pBGInfo[1].uMosaic  = (pRegs->mosaic&2) ? (pRegs->mosaic>>4) : 0;
 
-	pBGInfo[2].uScrollX = pRegs->bg3hofs.w & 0x7FF;
-	pBGInfo[2].uScrollY = pRegs->bg3vofs.w & 0x7FF;
+	pBGInfo[2].uScrollX = pRegs->bg3hofs.w & 0x3FF;
+	pBGInfo[2].uScrollY = pRegs->bg3vofs.w & 0x3FF;
 	pBGInfo[2].uScrAddr = (pRegs->bg3sc >> 2) << 10;
 	pBGInfo[2].uScrSize =  pRegs->bg3sc & 3;
-	pBGInfo[2].uChrAddr =  ((pRegs->bg34nba >> 0) & 0xF) << 12;
+	pBGInfo[2].uChrAddr =  ((pRegs->bg34nba >> 0) & 0x7) << 12;
 	pBGInfo[2].uChrSize =  (pRegs->bgmode >> 6) & 1;
 	pBGInfo[2].uMosaic  = (pRegs->mosaic&4) ? (pRegs->mosaic>>4) : 0;
 
-	pBGInfo[3].uScrollX = pRegs->bg4hofs.w & 0x7FF;
-	pBGInfo[3].uScrollY = pRegs->bg4vofs.w & 0x7FF;
+	pBGInfo[3].uScrollX = pRegs->bg4hofs.w & 0x3FF;
+	pBGInfo[3].uScrollY = pRegs->bg4vofs.w & 0x3FF;
 	pBGInfo[3].uScrAddr = (pRegs->bg4sc >> 2) << 10;
 	pBGInfo[3].uScrSize =  pRegs->bg4sc & 3;
-	pBGInfo[3].uChrAddr =  ((pRegs->bg34nba >> 4) & 0xF) << 12;
+	pBGInfo[3].uChrAddr =  ((pRegs->bg34nba >> 4) & 0x7) << 12;
 	pBGInfo[3].uChrSize =  (pRegs->bgmode >> 7) & 1;
 	pBGInfo[3].uMosaic  = (pRegs->mosaic&8) ? (pRegs->mosaic>>4) : 0;
 
@@ -794,4 +805,3 @@ void SnesPPURender::DecodeWindows(SNMaskT *pWindow, SNMaskT *pBGWindow)
 
 	PROF_LEAVE("DecodeWindows");
 }
-

@@ -2,7 +2,7 @@
 
 Changelog acumulado da versão 1.0.4, comparado com a tag **v1.0.3**.
 
-Data deste pacote de teste: **12 de agosto de 2026**
+Data deste pacote de teste: **13 de agosto de 2026**
 
 Versão exibida pelo programa: **SNESticle Revive PS2 v1.0.4**
 
@@ -91,6 +91,179 @@ Versão exibida pelo programa: **SNESticle Revive PS2 v1.0.4**
 - O 65816 e o controlador DMA/HDMA foram auditados contra o **MesenCE/Mesen2** e os
   5,12 milhões de vetores do SingleStepTests; CPU, interrupções, pilha, wrap e
   timing de HDMA receberam correções independentes do renderer de sprites.
+- Os latches de scroll BG/Mode 7 agora seguem o S-PPU; a auditoria de `OBSEL`
+  preserva explicitamente seu endereço efetivo, e o blender evita cópias
+  inteiras da CLUT quando nenhuma — ou somente poucas — cores mudaram.
+- DMA modo 4 para `$2116-$2119` agora mantém a ordem imediata entre endereço e
+  dados de VRAM, impedindo que uploads intercalados usem um `VMADDR` antigo.
+
+---
+
+## Revisão r29: Top Gear — ganhos confirmados e renderer estável
+
+- O cache OBJ de 8 KiB foi substituído por um cache físico de CHR 4bpp,
+  indexado diretamente pela VRAM. Os carros que reutilizam a mesma arte não
+  relêem nem decodificam os quatro planos em cada scanline; escritas comuns,
+  DMA, reset e load state invalidam os tiles físicos atingidos.
+- A produção de áudio agora segue o tempo emulado: em 32 kHz / 60 Hz usa a
+  sequência exata **532, 532, 536** amostras. Um frame lento deixa de encontrar
+  o ring vazio e misturar aproximadamente o dobro no frame seguinte, removendo
+  o ciclo de realimentação que ampliava as quedas.
+- O cache BG fica desligado por padrão. No log r28 ele tinha 100% de hits, mas
+  ainda custava mais no EE; desligá-lo reduziu o bloco BG CHR em cerca de 8% e
+  trouxe aproximadamente 2% de ganho total na corrida cheia.
+- O Mode 7 experimental da r28 foi retirado: na abertura giratória ele ficou
+  cerca de 5% mais lento que o caminho anterior. Nenhuma alteração especulativa
+  em HDMA/PPU Sync entrou nesta revisão.
+- Builds normais usam `SNES_DIAGNOSTICS=0`, `SNES_OBJ_CACHE=1` e
+  `SNES_BG_CACHE=0`. A bancada cobre OAM/VRAM, OBJ, cache CHR e o agendamento
+  de áudio; os quatro testes host-side passam.
+- Removidos os antigos `DEBUG_BOOT_SCREEN` e `MAINLOOP_DEBUG_GS_TEST`: a tela
+  BIOS já não imprimia conteúdo e o teste vermelho do GS era apenas um gancho
+  temporário. As ferramentas de diagnóstico SNES, profiler e DSP-4 permanecem.
+
+---
+
+## Revisão r24: recuperação de estabilidade após a r23
+
+- O reteste da r23 mostrou uma regressão severa no EE: Top Gear caiu para
+  aproximadamente 76% da velocidade, com uso do EE próximo de 97,5%, além de
+  oscilações percebidas desde a abertura do homebrew.
+- Foram retiradas as duas experiências introduzidas somente na r23: o cache
+  OBJ de 48 KiB e o caminho Mode 7 totalmente desenrolado. O renderer volta
+  exatamente aos caminhos da r22, que haviam sido confirmados como estáveis.
+- O cache OBJ seguro de 8 KiB da r22 continua ativo. Diagnósticos, profiler e
+  capturas DSP-4 permanecem desligados por padrão nas builds release.
+- A otimização de Top Gear voltará em testes A/B separados, uma alteração por
+  build, para medir cache OBJ e Mode 7 independentemente antes de qualquer
+  nova inclusão na versão principal.
+
+---
+
+## Revisão r23 (retirada): cache OBJ ampliado e Mode 7 em uma passagem
+
+- O reteste da r22 mostrou por que o cache de 8 KiB quase não ajudava o grid
+  cheio: eram apenas **21.180 hits para 132.900 misses** por janela, com zero
+  refresh de VRAM. A arte estava estável; as 512 entradas diretas é que se
+  expulsavam continuamente. O cache agora possui um slot exato para cada uma
+  das 4096 combinações tabela/tile/linha de OBJ, sem hash nem colisões.
+- A linha fica guardada sem paleta e na orientação normal. H-flip apenas
+  inverte os oito bytes já decodificados, portanto carros com outra paleta ou
+  espelhados reutilizam o mesmo slot. Os quatro bytes-fonte continuam sendo
+  conferidos em todo acesso; os 48 KiB não sacrificam correção em animação,
+  DMA, mudança de `OBSEL`, pause ou load state.
+- O efeito giratório antes do Start foi isolado separadamente: ele muda para
+  Mode 7 e faz HDMA de matriz/paleta em cada scanline, levando o fetch Mode 7
+  sozinho a cerca de 39% do tempo medido. O novo caminho conserva em
+  registrador o último tile do mapa e produz pixels, prioridade e opacidade em
+  uma única passagem de blocos de oito, evitando releitura do mapa e a antiga
+  varredura posterior de 256 pixels.
+- Uma regressão host compara pixels e máscaras do Mode 7 novo com o algoritmo
+  anterior em **4.120** combinações de repetição, tile 0, backdrop, EXTBG,
+  matrizes e coordenadas dentro/fora da área. A bancada OBJ também percorre os
+  4096 índices para provar que não existe colisão lógica. O ganho final e os
+  60 FPS ainda dependem do reteste desta ISO no PS2/emulador.
+
+---
+
+## Revisão r22: cache seguro de sprites para Top Gear
+
+- O log de **Top Gear** isolou a queda da largada cheia no fetch de OBJ: com
+  todos os carros, o renderer decodificava cerca de 154 mil linhas de tiles
+  por segundo, contra 37 mil quando o grid esvaziava, embora OAM, HDMA e IRQs
+  da tela dividida continuassem praticamente iguais.
+- O renderer agora mantém um cache direto de 8 KiB para linhas 4bpp de OBJ.
+  Ele guarda pixels sem paleta, permitindo que vários carros reutilizem a
+  mesma arte com cores diferentes. Cada acesso ainda compara os quatro bytes
+  originais da VRAM, impedindo sprites antigos depois de animação, DMA, mapa,
+  pause ou load state.
+- A ordem de fetch, prioridade, H/V-flip e limites reais de 32 OBJ/34 tiles
+  não foram alterados. `SNES_OBJ_CACHE=0` permite comparação A/B, e
+  `SNES_DIAGNOSTICS=1` registra hit/miss/refresh para medir o ganho no PS2.
+- A bancada host cobre cold miss, hit, H-flip separado, troca de VRAM, paleta
+  independente e o maior endereço possível. Top Gear 1/2 ainda dependem do
+  reteste na largada cheia antes de afirmar 60 FPS estáveis.
+
+---
+
+## Revisão r21: ordem de endereço/dados na DMA de VRAM
+
+- O log profundo de First Samurai isolou transferências frequentes em DMA modo
+  4 com `BBAD=$16`: cada grupo escreve `$2116`, `$2117`, `$2118` e `$2119`, ou
+  seja, troca o endereço da VRAM e grava uma palavra nesse novo endereço.
+- Antes da DMA, a fila por scanline da CPU era sincronizada corretamente. Já
+  dentro da transferência, os bytes de `$2116/$2117` voltavam para essa fila,
+  enquanto `$2118/$2119` usavam o caminho rápido imediato. Com isso, os dados
+  ultrapassavam o endereço e eram gravados no `VMADDR` anterior, explicando o
+  tilemap em mosaico com sprites e HUD ainda reconhecíveis.
+- Escritas MDMA destinadas aos registradores PPU `$2100-$213F` agora são
+  aplicadas imediatamente e na ordem da transferência. Portas APU/WRAM e o
+  caminho HDMA permanecem inalterados.
+- A bancada host ganhou uma regressão específica de modo 4 que alterna dois
+  endereços e duas palavras: confirma os dados em `$1234` e `$5678`, preserva
+  a posição antiga e verifica o `VMADDR` final. Testes de PPU/OBJ passam e os
+  ELFs EE de release e diagnóstico profundo foram compilados. A correção ainda
+  depende do reteste visual no NetherSX2/PS2 antes de ser marcada confirmada.
+
+---
+
+## Revisão r20: First Samurai/Final Fight 3 e custo global EE/GS
+
+- Corrigida uma divergência estrutural nos ports `$210D-$2114`. Scroll
+  horizontal usa bits 3-7 do latch H/V e bits 0-2 de um latch horizontal
+  separado; scroll vertical usa o latch H/V completo, e ambos são limitados a
+  10 bits. O código anterior montava todo write como um par baixo/alto simples.
+  Em jogos que alimentam scroll por HDMA isso pode escolher outro trecho do
+  tilemap a cada scanline, produzindo justamente a fragmentação em faixas
+  observada em First Samurai e Final Fight 3.
+- `$210D/$210E` atualizam também scrolls Mode 7 independentes de 13 bits. O
+  latch Mode 7 passa a ser compartilhado corretamente com `$211B-$2120`
+  (matriz e centro), em vez de cada registrador manter seu próprio byte
+  anterior. Os bits não implementados de `BGNBA` também deixam de alterar a
+  base de caracteres.
+- O endereço OBJ de `OBSEL` foi tornado explícito: o índice permanece com 8
+  bits e seu bit 8 seleciona o deslocamento completo `$1000-$4000`; a base usa
+  todos os três bits de `OBSEL.0-2`. Isso mantém o endereço efetivo da revisão
+  anterior e evita somar a segunda tabela duas vezes durante a auditoria; não
+  é apresentado como uma correção visual. O `OBSEL=62` do log também não é
+  tratado como causa comprovada de First Samurai.
+- A proteção contra a corrida entre CPU e GIF-DMA foi preservada. A área
+  estável do scratchpad continua separando o produtor EE do consumidor GIF,
+  porém a CLUT só é enviada quando CGRAM realmente muda e uma vez no começo de
+  cada quadro. Na chain completa, a cópia normal cai de 1792 para 768 bytes;
+  se HDMA altera uma única cor, são 772 bytes em vez de 1792. Uma carga
+  completa ainda usa um `memcpy`, e o upload integral exigido pelo layout CSM1
+  do GS é preservado.
+- Scanlines sem nenhum alvo em `CGADSUB`, sem clipping da main screen e com
+  brilho 15/15 agora usam uma chain GS direta: só main+paleta são enviados e
+  um único primitivo grava o resultado final. Nesse caso exato, sub/atributos
+  não podem alterar a imagem e deixam de ser compostos ou copiados; o staging
+  dinâmico cai de 768 para 256 bytes. Janela de cor, add/sub, half-color, fade
+  e force blank continuam obrigatoriamente na chain completa.
+- Com brilho SNES em 15/15, o passe final do GS era exatamente uma
+  multiplicação por 1. A chain comum preserva o mesmo estado final, mas deixa
+  de emitir o primitivo desse passe; ela só é reconstruída quando um fade
+  cruza 15/15. Brilhos menores continuam rasterizando o passe original, sem
+  aproximação de cor.
+- O renderer não busca tiles de BG/OBJ que não estejam habilitados nem na main
+  nem na sub screen. Quando a sub screen seleciona fixed color — ou quando
+  `CGADSUB` não possui alvo algum — ela é descartada antes do fetch. Isso
+  remove trabalho invisível de EE sem mudar prioridade, janela ou pixels dos
+  estados que realmente usam esses layers.
+- As duas CLUTs de atributos, constantes durante toda a execução e guardadas
+  numa faixa exclusiva de VRAM, deixam de ser reenviadas a cada quadro. Elas
+  são carregadas uma vez na primeira entrada do renderer SNES.
+- `SNES_DIAGNOSTICS=1` agora é o relatório geral de CPU/PPU/GS de menor
+  impacto. Hashes de OAM/VRAM/CGRAM, validação de staging, captura detalhada
+  de OBJ/DMA e contadores por instrução do GSU ficam em
+  `SNES_DIAGNOSTICS=2`, destinado a capturas curtas. O relatório geral também
+  separa bytes HDMA de scroll/CGRAM/janela-cor e registra os latches de scroll.
+- A bancada host cobre os quatro valores de name-select de `OBSEL`, sequências
+  H/V intercaladas, máscara de 10 bits, scroll Mode 7 e seu latch compartilhado;
+  testes de OBJ e equivalência OAM/VRAM passam. Builds EE de release,
+  diagnóstico geral e diagnóstico profundo também foram validados. First
+  Samurai e Final Fight 3 ainda precisam do reteste visual no NetherSX2/PS2
+  antes de marcar a cena como confirmada.
 
 ---
 
@@ -277,9 +450,9 @@ Versão exibida pelo programa: **SNESticle Revive PS2 v1.0.4**
   incorporado ao loop `Run()`, removendo uma chamada C++ por instrução; o
   benchmark host do caminho sintético melhorou cerca de 15% sem aumentar o
   objeto gerado.
-- `SNDBG_LOG` deixa de ficar forçado em toda build. O padrão normal é zero e
-  `make SNES_DIAGNOSTICS=1` recompila os contadores de investigação quando um
-  log detalhado for necessário.
+- `SNDBG_LOG` deixa de ficar forçado em toda build. O padrão normal é zero;
+  `make SNES_DIAGNOSTICS=1` recompila o relatório geral e o nível 2 habilita
+  os contadores profundos quando uma captura detalhada for necessária.
 - A bancada host passa com os diagnósticos ligados e desligados: 17.960 vetores
   aritméticos, além de pipeline, MMIO, cache rotacionado, PBR em `$60`, RAM,
   branches e `PLOT/RPIX`, todos sem falhas.

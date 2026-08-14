@@ -7,6 +7,7 @@
 #include "console.h"
 #include "snppu.h"
 #include "snppurender.h"
+#include "snppuchrcache.h"
 #include "rendersurface.h"
 #include "snmask.h"
 #include "snmaskop.h"
@@ -211,6 +212,7 @@ static Bool bPrint = TRUE;
 	} else
 	{
 		SNMaskT ColorMask[3];
+		Bool bDirectMain = FALSE;
 
 		if (m_UpdateFlags & SNESPPURENDER_UPDATE_PAL)
 		{
@@ -230,7 +232,11 @@ static Bool bPrint = TRUE;
             UpdateOBJVisibility(pRenderInfo->uObjY, pRenderInfo->uObjSize, pRegs->oampri.w, SNESPPU_OBJ_NUM);
             PROF_LEAVE("UpdateOBJVisibility");
 #if SNDBG_LOG
-			g_TmgCycObj += ProfCtrGetCycle() - _tObjUpdate;
+			{
+				Uint32 _dObjUpdate = ProfCtrGetCycle() - _tObjUpdate;
+				g_TmgCycObj += _dObjUpdate;
+				g_TmgCycObjUpdate += _dObjUpdate;
+			}
 #endif
 
 			m_UpdateFlags &= ~SNESPPURENDER_UPDATE_OBJ;
@@ -262,73 +268,91 @@ static Bool bPrint = TRUE;
 		// render line
 		RenderLine8(iLine, pRenderInfo);
 
+#if SNDBG_LOG
+		Uint32 _tColorMath = ProfCtrGetCycle();
+#endif
+
+#if CODE_PLATFORM == CODE_PS2
+		/* If no main-screen source is selected by CGADSUB, the sub screen and
+		   all add/sub masks are mathematically unable to change the result.
+		   With main clipping disabled and brightness at 15, the GS can expand
+		   the indexed main line directly into the output texture. */
+		bDirectMain = (pRegs->cgadsub & 0x3F) == 0 &&
+		              (pRegs->cgwsel & 0xC0) == 0 &&
+		              m_pPPU->GetIntensity() == 15;
+#endif
+
 		// determine color window mask for main screen
 		// 0 = disabled (masked)
         // 1 = enabled
-		switch ((pRegs->cgwsel >> 6) & 3)
+		if (!bDirectMain)
 		{
-		case 0:	// all the time
-			SNMaskSet(&ColorMask[0]);
-			break;
-		case 1: // inside color window
-			SNMaskCopy(&ColorMask[0], &pRenderInfo->BGWindow[SNPPU_BGWINDOW_COLOR]); 
-			break;
-		case 2:	// outside color window
-			SNMaskNOT(&ColorMask[0], &pRenderInfo->BGWindow[SNPPU_BGWINDOW_COLOR]);
-			break;
-		case 3: // confirmed: never.
-		default:
-			SNMaskClear(&ColorMask[0]);
-			break;
+			switch ((pRegs->cgwsel >> 6) & 3)
+			{
+			case 0:	// all the time
+				SNMaskSet(&ColorMask[0]);
+				break;
+			case 1: // inside color window
+				SNMaskCopy(&ColorMask[0], &pRenderInfo->BGWindow[SNPPU_BGWINDOW_COLOR]);
+				break;
+			case 2:	// outside color window
+				SNMaskNOT(&ColorMask[0], &pRenderInfo->BGWindow[SNPPU_BGWINDOW_COLOR]);
+				break;
+			case 3: // confirmed: never.
+			default:
+				SNMaskClear(&ColorMask[0]);
+				break;
+			}
+
+			// determine color window mask for sub screen
+			// 0 = disabled (masked)
+			// 1 = enabled
+			switch ((pRegs->cgwsel >> 4) & 3)
+			{
+			case 0:	// enabled all the time (only when add/sub layers of main screen are opaque)
+				SNMaskCopy(&ColorMask[1], &pRenderInfo->MainAddSubMask);
+				break;
+			case 1: // inside color window
+				SNMaskAND(&ColorMask[1], &pRenderInfo->MainAddSubMask, &pRenderInfo->BGWindow[SNPPU_BGWINDOW_COLOR]);
+				break;
+			case 2:	// outside color window
+				SNMaskANDN(&ColorMask[1], &pRenderInfo->MainAddSubMask, &pRenderInfo->BGWindow[SNPPU_BGWINDOW_COLOR]);
+				break;
+			case 3: // confirmed: never
+			default:
+				SNMaskClear(&ColorMask[1]);
+				break;
+			}
+
+			// determine pixels that are subject to 1/2 color add/sub
+			// these are the:
+			//      layers of the mainscreen that are set in the cgadsub register that are not obscured by color window
+			//      ANDed with the enabled pixels of the subscreen (opaque, fixed color, and windowed)
+			// Quoth: "in the back color constant area on the sub screen, it does not	become 1/2"
+			// there will never be a case where 1/2 is applied to a main or subscreen color that has been masked by color window
+			if (pRegs->cgadsub & 0x40)
+			{
+				// 0 = disabled
+				// 1 = 1/2 add sub enabled
+				SNMaskAND(&ColorMask[2], &pRenderInfo->SubAddSubMask, &ColorMask[1]);
+				SNMaskAND(&ColorMask[2], &ColorMask[2], &ColorMask[0]);
+			} else
+			{
+				// 1/2 disabled
+				SNMaskClear(&ColorMask[2]);
+			}
 		}
 
-		// determine color window mask for sub screen
-		// 0 = disabled (masked)
-        // 1 = enabled
-		switch ((pRegs->cgwsel >> 4) & 3)
-		{
-		case 0:	// enabled all the time (only when add/sub layers of main screen are opaque)
-			SNMaskCopy(&ColorMask[1], &pRenderInfo->MainAddSubMask);
-			break;
-		case 1: // inside color window
-			SNMaskAND(&ColorMask[1], &pRenderInfo->MainAddSubMask, &pRenderInfo->BGWindow[SNPPU_BGWINDOW_COLOR]);
-			break;
-		case 2:	// outside color window
-			SNMaskANDN(&ColorMask[1], &pRenderInfo->MainAddSubMask, &pRenderInfo->BGWindow[SNPPU_BGWINDOW_COLOR]);
-			break;
-		case 3: // confirmed: never
-		default:
-			SNMaskClear(&ColorMask[1]);
-			break;
-		}
-
-		// determine pixels that are subject to 1/2 color add/sub
-		// these are the:
-		//      layers of the mainscreen that are set in the cgadsub register that are not obscured by color window
-		//      ANDed with the enabled pixels of the subscreen (opaque, fixed color, and windowed)
-		// Quoth: "in the back color constant area on the sub screen, it does not	become 1/2"
-		// there will never be a case where 1/2 is applied to a main or subscreen color that has been masked by color window
-		if (pRegs->cgadsub & 0x40)
-		{
-			// 0 = disabled
-			// 1 = 1/2 add sub enabled
-			SNMaskAND(&ColorMask[2], &pRenderInfo->SubAddSubMask, &ColorMask[1]); 
-			SNMaskAND(&ColorMask[2], &ColorMask[2], &ColorMask[0]); 
-		} else
-		{
-			// 1/2 disabled
-			SNMaskClear(&ColorMask[2]);
-		}
-
-        // perform color blending of main+sub
+		// perform color blending of main+sub
 #if SNDBG_LOG
+		g_TmgCycColorMath += ProfCtrGetCycle() - _tColorMath;
 		Uint32 _tBlend = ProfCtrGetCycle();
 #endif
         m_pBlend->Exec(
             pBlendInfo,
             iLine,
             pRegs->coldata,
-            ColorMask,
+			bDirectMain ? NULL : ColorMask,
             (pRegs->cgadsub & 0x80),
             m_pPPU->GetIntensity()
             );
@@ -420,12 +444,15 @@ void SnesPPURender::EndRender()
 
 void SnesPPURender::UpdateVRAM(Uint32 uVramAddr)
 {
-	(void)uVramAddr;
+	UpdateVRAMRange(uVramAddr, 1);
+}
 
-	/* VRAM writes normally arrive as a DMA burst. Set bits only; the next
-	   rendered scanline performs one cache invalidation for the entire burst.
-	   OBJ pixels are fetched directly from VRAM and do not need a separate
-	   decoded-tile cache flush here. */
+void SnesPPURender::UpdateVRAMRange(Uint32 uVramAddr, Uint32 nWords)
+{
+	SnesPPUInvalidateChrCache(uVramAddr, nWords);
+
+	/* O cache CHR ja foi invalidado acima. Estes bits cuidam dos caches
+	   derivados de tilemap/scroll na proxima scanline. */
 	SetUpdateFlags(SNESPPURENDER_UPDATE_BGSCR |
 	               SNESPPURENDER_UPDATE_BGCHR);
 }

@@ -870,6 +870,14 @@ The cumulative notes for the current test version are available in
   fixes stack/direct-page/decimal/interrupt corner cases and aligns DMA/HDMA
   timing with MesenCE/Mesen2. The original scene still needs a PS2/NetherSX2 retest
   before it is considered fixed.
+- **First Samurai / Final Fight 3** — r20 replaces the old low/high-pair
+  approximation for `$210D-$2114` with the S-PPU's separate horizontal,
+  shared H/V and Mode 7 latches. The r21 deep capture then exposed the direct
+  cause of First Samurai's mosaic: mode-4 MDMA queued `$2116/$2117` address
+  writes but applied `$2118/$2119` data immediately, so tile words landed at a
+  stale VRAM address. MDMA PPU-port writes now retain transfer order and have a
+  focused host regression test. The affected scenes still require a
+  PS2/NetherSX2 visual retest before being marked fixed.
 - **Wild Guns** — r19 implements the documented 24-clock NMI delay after MDMA
   and corrects the HDMA state machine/mode 5. The full-screen flicker reported
   after character selection still needs confirmation on the same NetherSX2

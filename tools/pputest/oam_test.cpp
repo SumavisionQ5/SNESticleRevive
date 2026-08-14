@@ -2,20 +2,49 @@
 #include <cstring>
 
 #include "types.h"
+#include "sndma.h"
 #include "snppu.h"
 
 class TestRender : public ISnesPPURender
 {
 public:
+	Uint32 uSingleCalls;
+	Uint32 uRangeCalls;
+	Uint32 uFirstAddress;
+	Uint32 uLastAddress;
+	Uint32 nLastWords;
+
 	TestRender()
 	{
 		m_UpdateFlags = 0;
 		m_pPPU = NULL;
+		ClearStats();
 	}
 
 	void BeginRender(CRenderSurface *) {}
 	void EndRender() {}
 	void RenderLine(Int32) {}
+	void UpdateVRAM(Uint32 uAddress)
+	{
+		if (!uSingleCalls) uFirstAddress = uAddress;
+		uLastAddress = uAddress;
+		uSingleCalls++;
+	}
+	void UpdateVRAMRange(Uint32 uAddress, Uint32 nWords)
+	{
+		uFirstAddress = uAddress;
+		uLastAddress = uAddress;
+		nLastWords = nWords;
+		uRangeCalls++;
+	}
+	void ClearStats()
+	{
+		uSingleCalls = 0;
+		uRangeCalls = 0;
+		uFirstAddress = 0;
+		uLastAddress = 0;
+		nLastWords = 0;
+	}
 };
 
 static int g_Failures;
@@ -100,6 +129,84 @@ static void CheckVRAMBlockEquivalence()
 	}
 }
 
+static void CheckScrollAndMode7Latches()
+{
+	SnesPPU ppu;
+	TestRender render;
+
+	ppu.SetPPURender(&render);
+	render.SetPPU(&ppu);
+
+	// Horizontal scroll keeps a separate 3-bit latch and is 10-bit wide.
+	ppu.Reset();
+	ppu.Write8(0x210F, 0x34);
+	ppu.Write8(0x210F, 0xFF);
+	Check("BG H scroll latch/mask", ppu.GetRegs()->bg2hofs.w, 0x334);
+
+	// Vertical scroll consumes the shared H/V latch, not the H-only latch.
+	ppu.Reset();
+	ppu.Write8(0x210F, 0x5A);
+	ppu.Write8(0x2110, 0x02);
+	Check("BG V shared latch", ppu.GetRegs()->bg2vofs.w, 0x25A);
+
+	// A vertical write changes bits 3-7 used by the next H write, while the
+	// low three bits still come from the previous horizontal write.
+	ppu.Reset();
+	ppu.Write8(0x210F, 0xA5);
+	ppu.Write8(0x2110, 0x3C);
+	ppu.Write8(0x2111, 0x02);
+	Check("BG interleaved H/V latches", ppu.GetRegs()->bg3hofs.w, 0x23D);
+
+	// $210D/$210E update both ordinary BG1 scroll and the independent
+	// 13-bit Mode 7 scroll registers.
+	ppu.Reset();
+	ppu.Write8(0x210D, 0x34);
+	ppu.Write8(0x210D, 0x12);
+	Check("BG1 H scroll from $210D", ppu.GetRegs()->bg1hofs.w, 0x234);
+	Check("Mode 7 H scroll from $210D", ppu.GetRegs()->m7hofs.w, 0x1234);
+
+	// All Mode 7 ports share one byte latch, including BG1 scroll and the
+	// matrix/centre registers.
+	ppu.Reset();
+	ppu.Write8(0x210D, 0x34);
+	ppu.Write8(0x211B, 0x12);
+	Check("Mode 7 shared latch matrix", ppu.GetRegs()->m7a.w, 0x1234);
+	ppu.Write8(0x210E, 0x05);
+	Check("Mode 7 shared latch scroll", ppu.GetRegs()->m7vofs.w, 0x0512);
+	Check("BG1 V has independent latch", ppu.GetRegs()->bg1vofs.w, 0x0134);
+}
+
+static void CheckMode4VRAMAddressDataDMA()
+{
+	SnesPPU ppu;
+	TestRender render;
+	/* DMA mode 4 at BBAD=$16 repeats VMADDL, VMADDH, VMDATAL,
+	   VMDATAH.  First Samurai uses this command stream for scattered
+	   tilemap updates. */
+	static const Uint8 commands[] =
+	{
+		0x34, 0x12, 0xAA, 0xBB,
+		0x78, 0x56, 0xCC, 0xDD
+	};
+	static const Uint8 ports[] = {0x16, 0x17, 0x18, 0x19};
+	int i;
+
+	ppu.SetPPURender(&render);
+	render.SetPPU(&ppu);
+	ppu.Reset();
+	ppu.Write8(0x2115, 0x80); // increment by one after $2119
+	ppu.Write8(0x2116, 0x55);
+	ppu.Write8(0x2117, 0x55);
+
+	for (i = 0; i < (int)sizeof(commands); i++)
+		SnesDMAWritePPUPort(&ppu, ports[i & 3], commands[i]);
+
+	Check("mode4 first addressed word", ppu.GetVramPtr(0x1234)[0], 0xBBAA);
+	Check("mode4 second addressed word", ppu.GetVramPtr(0x5678)[0], 0xDDCC);
+	Check("mode4 stale address untouched", ppu.GetVramPtr(0x5555)[0], 0x0000);
+	Check("mode4 final address", ppu.GetRegs()->vmaddr.w, 0x5679);
+}
+
 int main()
 {
 	SnesPPU ppu;
@@ -107,6 +214,8 @@ int main()
 	Uint8 *pOAM;
 
 	CheckVRAMBlockEquivalence();
+	CheckScrollAndMode7Latches();
+	CheckMode4VRAMAddressDataDMA();
 
 	ppu.SetPPURender(&render);
 	render.SetPPU(&ppu);
@@ -206,6 +315,7 @@ int main()
 	{
 		const Uint8 data[] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
 		ppu.Reset();
+		render.ClearStats();
 		ppu.Write8(0x2115, 0x80); // increment by one after $2119
 		ppu.Write8(0x2116, 0x34);
 		ppu.Write8(0x2117, 0x12);
@@ -215,6 +325,9 @@ int main()
 		Check("VRAM block word 2", ppu.GetVramPtr(0x1236)[0], 0x6655);
 		Check("VRAM block address", ppu.GetRegs()->vmaddr.w, 0x1237);
 		Check("VRAM block read latch", ppu.GetRegs()->vmreadlatch.w, 0x1236);
+		Check("VRAM block range calls", render.uRangeCalls, 1);
+		Check("VRAM block invalidate address", render.uFirstAddress, 0x1234);
+		Check("VRAM block invalidate words", render.nLastWords, 3);
 	}
 
 	// Physical VRAM wraps every $8000 words while VMADDR remains 16-bit.
@@ -247,6 +360,7 @@ int main()
 	{
 		const Uint8 data[] = {0x12, 0x34};
 		ppu.Reset();
+		render.ClearStats();
 		ppu.Write8(0x2115, 0x00); // increment after $2118
 		ppu.Write8(0x2116, 0x30);
 		ppu.Write8(0x2117, 0x00);
@@ -255,6 +369,9 @@ int main()
 		Check("VRAM low-increment high", ppu.GetVramPtr(0x31)[0], 0x3400);
 		Check("VRAM low-increment address", ppu.GetRegs()->vmaddr.w, 0x31);
 		Check("VRAM low-increment latch", ppu.GetRegs()->vmreadlatch.w, 0x31);
+		Check("VRAM low-increment invalidates both", render.uSingleCalls, 2);
+		Check("VRAM low-increment first invalidation", render.uFirstAddress, 0x30);
+		Check("VRAM low-increment last invalidation", render.uLastAddress, 0x31);
 	}
 
 	std::printf(g_Failures ? "FAIL (%d)\n" : "PASS\n", g_Failures);

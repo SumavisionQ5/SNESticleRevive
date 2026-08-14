@@ -47,7 +47,19 @@ static Int8 _SNDma_MDMAInc[4] =
 	1, 0, -1, 0
 };
 
-#if SNDBG_LOG
+void SnesDMAWritePPUPort(SnesPPU *pPPU, Uint32 uPort, Uint8 uData)
+{
+	assert(pPPU != NULL);
+	assert((uPort & 0xFF) < 0x40);
+
+	/* The caller has already synchronized the scanline write queue at MDMA
+	   start.  Do not re-enter SNCPUWrite8 here: it would enqueue address and
+	   control registers while the optimized data ports below take effect
+	   immediately, reversing the byte order observed by the PPU. */
+	pPPU->Write8(0x2100 + (uPort & 0xFF), uData);
+}
+
+#if SNDBG_DEEP
 struct SNDmaOAMCaptureT
 {
 	Bool Active;
@@ -225,6 +237,7 @@ void SnesDMAC::SetMDMAEnable(Uint8 uData)
 		if (uBytes > g_DbgDMAMaxBytes)
 			g_DbgDMAMaxBytes = uBytes;
 
+		#if SNDBG_DEEP
 		if (g_DbgCaptureActive)
 		{
 			const SnesPPURegsT *pRegs = m_pPPU->GetRegs();
@@ -266,6 +279,7 @@ void SnesDMAC::SetMDMAEnable(Uint8 uData)
 					(unsigned)pRegs->oamaddr.w, (unsigned)uHash);
 			}
 		}
+		#endif
 
 		if ((iDelta > 0 && uBytes > 0x10000u - pChan->a1tx) ||
 		    (iDelta < 0 && uBytes > (Uint32)pChan->a1tx + 1u))
@@ -503,8 +517,8 @@ void SnesDMAC::TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes)
 			// fetch data byte
 			uData = pData[iTransfer];
 
-			// get address to write to (b-bus)
-			uAddr = pChan->bbadx + pTransfer[iTransfer & 3];
+			// get address to write to (8-bit b-bus, wrapping at $21FF)
+			uAddr = (pChan->bbadx + pTransfer[iTransfer & 3]) & 0xFF;
 			iTransfer++;
 
 			switch (uAddr)
@@ -523,8 +537,14 @@ void SnesDMAC::TransferData(SnesDMAChT *pChan, Uint8 *pData, Int32 nBytes)
 				break;
 
 			default:
-				// write byte
-				SNCPUWrite8(m_pCPU, 0x2100 + uAddr, uData);
+				/* PPU MDMA bytes must bypass the normal per-scanline write
+				   queue.  First Samurai uses mode 4 at BBAD=$16, producing
+				   $2116,$2117,$2118,$2119 groups; queuing only the first
+				   two made every tile word land at a stale VRAM address. */
+				if (uAddr < 0x40)
+					SnesDMAWritePPUPort(m_pPPU, uAddr, uData);
+				else
+					SNCPUWrite8(m_pCPU, 0x2100 + uAddr, uData);
 			}
 			nBytes--;
 		}
@@ -690,7 +710,7 @@ void SnesDMAC::ProcessMDMAChFast(Uint32 uChan)
     // are we done?
     if (pChan->dasx == 0)
     {
-#if SNDBG_LOG
+#if SNDBG_DEEP
 		if (_SNDmaOAMCapture.Active &&
 		    _SNDmaOAMCapture.Frame == g_DbgCaptureFrameNo &&
 		    _SNDmaOAMCapture.Channel == uChan)
@@ -813,6 +833,19 @@ void SnesDMAC::ProcessHDMACh(Uint32 uChan)
 		{
 			uData = SNCPURead8(m_pCPU, uAddrA);
 			SNCPUWrite8(m_pCPU, uAddrB, uData);
+#if SNDBG_LOG
+			{
+				Uint32 uPort = uAddrB & 0xFF;
+				if (uPort >= 0x0D && uPort <= 0x14)
+					g_DbgHDMAScrollBytes++;
+				else if (uPort == 0x22)
+					g_DbgHDMACGRAMBytes++;
+				else if (uPort >= 0x23 && uPort <= 0x32)
+					g_DbgHDMAWindowColorBytes++;
+				else
+					g_DbgHDMAOtherBytes++;
+			}
+#endif
 		}
 
 		if (pChan->dmapx & 0x40)
@@ -854,6 +887,11 @@ void SnesDMAC::ProcessHDMA()
 	if (!uActive)
 		return;
 
+#if SNDBG_LOG
+	Uint32 _tHDMAData = ProfCtrGetCycle();
+	g_DbgHDMALines++;
+#endif
+
 	/* Mesen performs every channel's data phase first, followed by every
 	   channel's counter/table phase.  Interleaving those phases changes both
 	   B-bus side effects and the point at which IRQ/NMI can be observed. */
@@ -862,8 +900,18 @@ void SnesDMAC::ProcessHDMA()
 	{
 		Uint8 uMask = (Uint8)(1 << uChan);
 		if ((uActive & uMask) && (m_HDMADoTransfer & uMask))
+		{
+#if SNDBG_LOG
+			g_DbgHDMATransferChannels++;
+#endif
 			ProcessHDMACh(uChan);
+		}
 	}
+
+#if SNDBG_LOG
+	g_TmgCycHDMAData += ProfCtrGetCycle() - _tHDMAData;
+	Uint32 _tHDMATable = ProfCtrGetCycle();
+#endif
 
 	for (Uint32 uChan = 0; uChan < SNESDMAC_CHANNEL_NUM; uChan++)
 	{
@@ -873,6 +921,10 @@ void SnesDMAC::ProcessHDMA()
 
 		if (!(uActive & uMask))
 			continue;
+
+#if SNDBG_LOG
+		g_DbgHDMAActiveChannels++;
+#endif
 
 		pChan = &m_Channels[uChan];
 		pChan->ntlrx--;
@@ -925,6 +977,9 @@ void SnesDMAC::ProcessHDMA()
 			m_HDMADoTransfer |= uMask;
 		}
 	}
+#if SNDBG_LOG
+	g_TmgCycHDMATable += ProfCtrGetCycle() - _tHDMATable;
+#endif
 }
 
 void SnesDMAC::Reset()

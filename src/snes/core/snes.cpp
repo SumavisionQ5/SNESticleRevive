@@ -27,6 +27,19 @@ static Uint32 g_TmgWinSumHDMA = 0;
 static Uint32 g_TmgWinSumAPU  = 0;
 static Uint32 g_TmgWinSumMix  = 0;
 static Uint32 g_TmgWinSumBlend = 0;
+static Uint32 g_TmgWinSumPPUSync = 0;
+static Uint32 g_TmgWinSumBGInfo = 0;
+static Uint32 g_TmgWinSumBGOffset = 0;
+static Uint32 g_TmgWinSumBGMap = 0;
+static Uint32 g_TmgWinSumBGChr = 0;
+static Uint32 g_TmgWinSumBGMain = 0;
+static Uint32 g_TmgWinSumBGSub = 0;
+static Uint32 g_TmgWinSumColorMath = 0;
+static Uint32 g_TmgWinSumObjUpdate = 0;
+static Uint32 g_TmgWinSumObjFetch = 0;
+static Uint32 g_TmgWinSumObjDraw = 0;
+static Uint32 g_TmgWinSumHDMAData = 0;
+static Uint32 g_TmgWinSumHDMATable = 0;
 static Int32  g_TmgIrqLineMin = 9999;
 static Int32  g_TmgIrqLineMax = -1;
 static Uint32 g_TmgIrqCount   = 0;   // total de H-IRQs na janela
@@ -42,6 +55,19 @@ Uint32 g_TmgCycHDMA = 0;
 Uint32 g_TmgCycAPU = 0;
 Uint32 g_TmgCycMix = 0;
 Uint32 g_TmgCycBlend = 0;
+Uint32 g_TmgCycPPUSync = 0;
+Uint32 g_TmgCycBGInfo = 0;
+Uint32 g_TmgCycBGOffset = 0;
+Uint32 g_TmgCycBGMap = 0;
+Uint32 g_TmgCycBGChr = 0;
+Uint32 g_TmgCycBGMain = 0;
+Uint32 g_TmgCycBGSub = 0;
+Uint32 g_TmgCycColorMath = 0;
+Uint32 g_TmgCycObjUpdate = 0;
+Uint32 g_TmgCycObjFetch = 0;
+Uint32 g_TmgCycObjDraw = 0;
+Uint32 g_TmgCycHDMAData = 0;
+Uint32 g_TmgCycHDMATable = 0;
 
 Uint32 g_DbgOAMWrites = 0;
 Uint32 g_DbgVRAMWrites = 0;
@@ -49,6 +75,14 @@ Uint32 g_DbgCGRAMWrites = 0;
 Uint32 g_DbgObjEnabledLines = 0;
 Uint32 g_DbgObjOamRefs = 0;
 Uint32 g_DbgObjTiles = 0;
+Uint32 g_DbgObjCacheHits = 0;
+Uint32 g_DbgObjCacheMisses = 0;
+Uint32 g_DbgObjCacheRefreshes = 0;
+Uint32 g_DbgBGCacheHits = 0;
+Uint32 g_DbgBGCacheMisses = 0;
+Uint32 g_DbgBGCacheRefreshes = 0;
+Uint32 g_DbgChrCacheInvalidations = 0;
+Uint32 g_DbgAudioSamples = 0;
 Uint32 g_DbgObjOpaqueTiles = 0;
 Uint32 g_DbgObjCandidatePixels = 0;
 Uint32 g_DbgObjDrawnPixels = 0;
@@ -71,12 +105,26 @@ Uint32 g_DbgDMAOtherBytes = 0;
 Uint32 g_DbgDMAWraps = 0;
 Uint32 g_DbgDMAMaxBytes = 0;
 Uint32 g_DbgDMAModes[8] = {0,0,0,0,0,0,0,0};
+Uint32 g_DbgHDMAScrollBytes = 0;
+Uint32 g_DbgHDMACGRAMBytes = 0;
+Uint32 g_DbgHDMAWindowColorBytes = 0;
+Uint32 g_DbgHDMAOtherBytes = 0;
+Uint32 g_DbgPPUQueuedWrites = 0;
+Uint32 g_DbgPPUAppliedWrites = 0;
+Uint32 g_DbgPPUQueueFull = 0;
+Uint32 g_DbgHDMALines = 0;
+Uint32 g_DbgHDMAActiveChannels = 0;
+Uint32 g_DbgHDMATransferChannels = 0;
+Uint32 g_DbgBGActiveLayers = 0;
+Uint32 g_DbgBGMapReloads = 0;
+Uint32 g_DbgBGChrRows = 0;
 Bool   g_DbgCaptureActive = FALSE;
 Uint32 g_DbgCaptureFrameNo = 0;
 // contagem de acessos ao DSP por janela (diagnostico de carga)
 static Uint32 g_TmgDspRd = 0;
 static Uint32 g_TmgDspWr = 0;
 
+#if SNDBG_DEEP
 // Bases por frame para detectar o instante em que os sprites colapsam sem
 // despejar uma linha de log a cada frame.
 static Uint32 g_DbgFrameBaseOAM = 0;
@@ -102,6 +150,7 @@ static Uint32 SnesDbgHash32(const void *pData, Uint32 nBytes)
 	}
 	return h;
 }
+#endif
 
 #endif
 
@@ -203,10 +252,14 @@ void SnesSystem::SyncSPC(Int32 uExtra)
 inline void SnesSystem::SyncPPU()
 {
 #if SNDBG_LOG
+	Uint32 _tSync = ProfCtrGetCycle();
 	g_DbgPPUSyncCalls++;
 #endif
 	// sync ppu to current line
 	m_PPU.Sync(m_uLine);
+#if SNDBG_LOG
+	g_TmgCycPPUSync += ProfCtrGetCycle() - _tSync;
+#endif
 }
 
 #if SNES_DEBUG
@@ -1339,6 +1392,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
     m_uLine = 0;
 
 #if SNDBG_LOG
+	#if SNDBG_DEEP
 	g_DbgCaptureFrameNo = g_TmgFrameNo + 1;
 	g_DbgCaptureActive =
 		(g_DbgCaptureFrameNo % (SNDBG_FRAME_PERIOD * 5u)) == 0;
@@ -1347,6 +1401,9 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 		DLog("[snes-capture] begin f=%u (light OBJ/DMA trace)",
 			(unsigned)g_DbgCaptureFrameNo);
 	}
+	#else
+	g_DbgCaptureActive = FALSE;
+	#endif
 	// --- timing: marca inicio do frame ---
 	g_TmgFrameStart  = ProfCtrGetCycle();
 	g_TmgCycM7  = 0;
@@ -1359,6 +1416,20 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	g_TmgCycAPU = 0;
 	g_TmgCycMix = 0;
 	g_TmgCycBlend = 0;
+	g_TmgCycPPUSync = 0;
+	g_TmgCycBGInfo = 0;
+	g_TmgCycBGOffset = 0;
+	g_TmgCycBGMap = 0;
+	g_TmgCycBGChr = 0;
+	g_TmgCycBGMain = 0;
+	g_TmgCycBGSub = 0;
+	g_TmgCycColorMath = 0;
+	g_TmgCycObjUpdate = 0;
+	g_TmgCycObjFetch = 0;
+	g_TmgCycObjDraw = 0;
+	g_TmgCycHDMAData = 0;
+	g_TmgCycHDMATable = 0;
+	#if SNDBG_DEEP
 	g_DbgFrameBaseOAM = g_DbgOAMWrites;
 	g_DbgFrameBaseVRAM = g_DbgVRAMWrites;
 	g_DbgFrameBaseCGRAM = g_DbgCGRAMWrites;
@@ -1368,6 +1439,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 	g_DbgFrameBaseOpaque = g_DbgObjOpaqueTiles;
 	g_DbgFrameBaseCandidate = g_DbgObjCandidatePixels;
 	g_DbgFrameBaseDrawn = g_DbgObjDrawnPixels;
+	#endif
 #endif
 
 	m_IO.LatchInput(pInput);
@@ -1512,10 +1584,24 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 		g_TmgWinSumAPU += g_TmgCycAPU;
 		g_TmgWinSumMix += g_TmgCycMix;
 		g_TmgWinSumBlend += g_TmgCycBlend;
+		g_TmgWinSumPPUSync += g_TmgCycPPUSync;
+		g_TmgWinSumBGInfo += g_TmgCycBGInfo;
+		g_TmgWinSumBGOffset += g_TmgCycBGOffset;
+		g_TmgWinSumBGMap += g_TmgCycBGMap;
+		g_TmgWinSumBGChr += g_TmgCycBGChr;
+		g_TmgWinSumBGMain += g_TmgCycBGMain;
+		g_TmgWinSumBGSub += g_TmgCycBGSub;
+		g_TmgWinSumColorMath += g_TmgCycColorMath;
+		g_TmgWinSumObjUpdate += g_TmgCycObjUpdate;
+		g_TmgWinSumObjFetch += g_TmgCycObjFetch;
+		g_TmgWinSumObjDraw += g_TmgCycObjDraw;
+		g_TmgWinSumHDMAData += g_TmgCycHDMAData;
+		g_TmgWinSumHDMATable += g_TmgCycHDMATable;
 		if (cyc > g_TmgWinMaxCyc) g_TmgWinMaxCyc = cyc;
 		g_TmgWinFrames++;
 		g_TmgFrameNo++;
 
+		#if SNDBG_DEEP
 		// Captura pontual quando pixels OBJ caem bruscamente apesar de ainda
 		// haver sprites selecionados. Os hashes distinguem OAM/VRAM corrompida
 		// de um erro posterior de mascara/prioridade no compositor.
@@ -1571,6 +1657,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)pr->vmaddr.w, (unsigned)pr->cgadd.w);
 			DLog("[snes-capture] end f=%u", (unsigned)g_TmgFrameNo);
 		}
+		#endif
 		if (g_TmgWinFrames >= SNDBG_FRAME_PERIOD)
 		{
 			Uint32 sum   = g_TmgWinSumCyc ? g_TmgWinSumCyc : 1;
@@ -1589,6 +1676,19 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			Uint32 pAPU  = (Uint32)(((Uint64)g_TmgWinSumAPU * 100u) / sum);
 			Uint32 pMix  = (Uint32)(((Uint64)g_TmgWinSumMix * 100u) / sum);
 			Uint32 pBlend = (Uint32)(((Uint64)g_TmgWinSumBlend * 100u) / sum);
+			Uint32 pPPUSync = (Uint32)(((Uint64)g_TmgWinSumPPUSync * 100u) / sum);
+			Uint32 pBGInfo = (Uint32)(((Uint64)g_TmgWinSumBGInfo * 100u) / sum);
+			Uint32 pBGOffset = (Uint32)(((Uint64)g_TmgWinSumBGOffset * 100u) / sum);
+			Uint32 pBGMap = (Uint32)(((Uint64)g_TmgWinSumBGMap * 100u) / sum);
+			Uint32 pBGChr = (Uint32)(((Uint64)g_TmgWinSumBGChr * 100u) / sum);
+			Uint32 pBGMain = (Uint32)(((Uint64)g_TmgWinSumBGMain * 100u) / sum);
+			Uint32 pBGSub = (Uint32)(((Uint64)g_TmgWinSumBGSub * 100u) / sum);
+			Uint32 pColorMath = (Uint32)(((Uint64)g_TmgWinSumColorMath * 100u) / sum);
+			Uint32 pObjUpdate = (Uint32)(((Uint64)g_TmgWinSumObjUpdate * 100u) / sum);
+			Uint32 pObjFetch = (Uint32)(((Uint64)g_TmgWinSumObjFetch * 100u) / sum);
+			Uint32 pObjDraw = (Uint32)(((Uint64)g_TmgWinSumObjDraw * 100u) / sum);
+			Uint32 pHDMAData = (Uint32)(((Uint64)g_TmgWinSumHDMAData * 100u) / sum);
+			Uint32 pHDMATable = (Uint32)(((Uint64)g_TmgWinSumHDMATable * 100u) / sum);
 			Uint64 uPPUOther = g_TmgWinSumPPU;
 			if (uPPUOther > (Uint64)g_TmgWinSumObj + g_TmgWinSumBlend)
 				uPPUOther -= (Uint64)g_TmgWinSumObj + g_TmgWinSumBlend;
@@ -1600,7 +1700,8 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			// CPU/APU/PPU sao medidas inclusivas (podem se sobrepor quando um
 			// acesso do 65816 sincroniza outro bloco). Ainda assim identificam
 			// diretamente qual rotina esta consumindo o tempo da EE.
-			DLog("[snes-perf] f=%u avg=%u snes=%u.%u fps peak=%u%% cpu=%u%% ppu=%u%% gsu=%u%% apu=%u%% mix=%u%% mdma=%u%% hdma=%u%%",
+			DLog("[snes-perf] diag=%s f=%u avg=%u snes=%u.%u fps peak=%u%% cpu=%u%% ppu=%u%% gsu=%u%% apu=%u%% mix=%u%% mdma=%u%% hdma=%u%%",
+				SNDBG_DEEP ? "deep" : "general",
 				(unsigned)g_TmgFrameNo, (unsigned)avg,
 				(unsigned)(fps10 / 10), (unsigned)(fps10 % 10),
 				(unsigned)ratio,
@@ -1613,17 +1714,66 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_TmgDspRd, (unsigned)g_TmgDspWr,
 				(int)g_TmgIrqLineMin, (int)g_TmgIrqLineMax,
 				(unsigned)g_TmgIrqCount);
-			DLog("[snes-obj] ports oam=%u vram=%u cgram=%u | lines=%u refs=%u tiles=%u opaque=%u empty=%u range/time=%u/%u",
+			DLog("[snes-hot-bg] schema=topgear-r29 pct sync/info/off/map/chr/main/sub/cmath=%u/%u/%u/%u/%u/%u/%u/%u",
+				(unsigned)pPPUSync, (unsigned)pBGInfo,
+				(unsigned)pBGOffset, (unsigned)pBGMap,
+				(unsigned)pBGChr, (unsigned)pBGMain,
+				(unsigned)pBGSub, (unsigned)pColorMath);
+			DLog("[snes-hot-obj] pct update/fetch/draw=%u/%u/%u hdma data/table=%u/%u",
+				(unsigned)pObjUpdate, (unsigned)pObjFetch,
+				(unsigned)pObjDraw, (unsigned)pHDMAData,
+				(unsigned)pHDMATable);
+			DLog("[snes-hot-cyc] avg sync/map/chr/main/sub/cmath/obj-u/obj-f/obj-d/hdma-d/hdma-t=%u/%u/%u/%u/%u/%u/%u/%u/%u/%u/%u",
+				(unsigned)(g_TmgWinSumPPUSync / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumBGMap / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumBGChr / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumBGMain / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumBGSub / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumColorMath / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumObjUpdate / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumObjFetch / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumObjDraw / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumHDMAData / g_TmgWinFrames),
+				(unsigned)(g_TmgWinSumHDMATable / g_TmgWinFrames));
+			DLog("[snes-raster] ppu queued/applied/full=%u/%u/%u hdma lines/active/xfer=%u/%u/%u bg layers/reloads/chrrows=%u/%u/%u",
+				(unsigned)g_DbgPPUQueuedWrites,
+				(unsigned)g_DbgPPUAppliedWrites,
+				(unsigned)g_DbgPPUQueueFull,
+				(unsigned)g_DbgHDMALines,
+				(unsigned)g_DbgHDMAActiveChannels,
+				(unsigned)g_DbgHDMATransferChannels,
+				(unsigned)g_DbgBGActiveLayers,
+				(unsigned)g_DbgBGMapReloads,
+				(unsigned)g_DbgBGChrRows);
+			DLog("[snes-obj] ports oam=%u vram=%u cgram=%u | lines=%u refs=%u tiles=%u range/time=%u/%u",
 				(unsigned)g_DbgOAMWrites, (unsigned)g_DbgVRAMWrites,
 				(unsigned)g_DbgCGRAMWrites, (unsigned)g_DbgObjEnabledLines,
 				(unsigned)g_DbgObjOamRefs, (unsigned)g_DbgObjTiles,
-				(unsigned)g_DbgObjOpaqueTiles, (unsigned)g_DbgObjEmptyLines,
 				(unsigned)g_DbgObjRangeLimitLines, (unsigned)g_DbgObjLimitLines);
-			DLog("[snes-obj] pixels candidate/drawn=%u/%u edge-tiles=%u | regs obsel=%02X tm=%02X ts=%02X first=%u",
+			DLog("[snes-obj-cache] enabled=%u hit/miss=%u/%u",
+				(unsigned)SNPPU_OBJ_CACHE, (unsigned)g_DbgObjCacheHits,
+				(unsigned)g_DbgObjCacheMisses);
+			DLog("[snes-bg-cache] enabled=%u hit/miss=%u/%u",
+				(unsigned)SNPPU_BG_CACHE, (unsigned)g_DbgBGCacheHits,
+				(unsigned)g_DbgBGCacheMisses);
+			DLog("[snes-chr-cache] direct=1 bytes=448512 invalidated-tiles=%u",
+				(unsigned)g_DbgChrCacheInvalidations);
+			DLog("[snes-audio] samples=%u avg/frame=%u",
+				(unsigned)g_DbgAudioSamples,
+				(unsigned)(g_DbgAudioSamples / g_TmgWinFrames));
+			#if SNDBG_DEEP
+			DLog("[snes-obj-deep] opaque/empty=%u/%u pixels candidate/drawn=%u/%u edge-tiles=%u | regs obsel=%02X tm=%02X ts=%02X first=%u",
+				(unsigned)g_DbgObjOpaqueTiles, (unsigned)g_DbgObjEmptyLines,
 				(unsigned)g_DbgObjCandidatePixels, (unsigned)g_DbgObjDrawnPixels,
 				(unsigned)g_DbgObjClippedTiles,
 				(unsigned)g_DbgObjOBSEL, (unsigned)g_DbgObjTM,
 				(unsigned)g_DbgObjTS, (unsigned)g_DbgObjPriority);
+			#else
+			DLog("[snes-obj] regs obsel=%02X tm=%02X ts=%02X first=%u (pixel counters require SNES_DIAGNOSTICS=2)",
+				(unsigned)g_DbgObjOBSEL, (unsigned)g_DbgObjTM,
+				(unsigned)g_DbgObjTS, (unsigned)g_DbgObjPriority);
+			#endif
+			#if SNDBG_DEEP
 			{
 				const SnesPPURegsT *pr = m_PPU.GetRegs();
 				Uint32 hOAM = SnesDbgHash32(m_PPU.GetOAM(), sizeof(SnesOAMT));
@@ -1644,6 +1794,7 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 					(unsigned)(Uint8)pr->bg3sc, (unsigned)(Uint8)pr->bg4sc,
 					(unsigned)(Uint8)pr->bg12nba, (unsigned)(Uint8)pr->bg34nba);
 			}
+			#endif
 			DLog("[snes-sync] ppu calls/lines=%u/%u dma starts=%u read=%u wrap=%u max=%u",
 				(unsigned)g_DbgPPUSyncCalls, (unsigned)g_DbgPPURenderLines,
 				(unsigned)g_DbgDMAStarts, (unsigned)g_DbgDMAReadBytes,
@@ -1655,6 +1806,28 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)g_DbgDMAModes[2], (unsigned)g_DbgDMAModes[3],
 				(unsigned)g_DbgDMAModes[4], (unsigned)g_DbgDMAModes[5],
 				(unsigned)g_DbgDMAModes[6], (unsigned)g_DbgDMAModes[7]);
+			DLog("[snes-hdma] bytes scroll/cgram/window-color/other=%u/%u/%u/%u",
+				(unsigned)g_DbgHDMAScrollBytes,
+				(unsigned)g_DbgHDMACGRAMBytes,
+				(unsigned)g_DbgHDMAWindowColorBytes,
+				(unsigned)g_DbgHDMAOtherBytes);
+			{
+				const SnesPPURegsT *pr = m_PPU.GetRegs();
+				DLog("[snes-ppu] mode/tm/ts/cgw/cgad/bright=%02X/%02X/%02X/%02X/%02X/%u scroll bg1=%03X/%03X bg2=%03X/%03X bg3=%03X/%03X bg4=%03X/%03X m7=%04X/%04X latch hv/h/m7=%02X/%02X/%02X",
+					(unsigned)(Uint8)pr->bgmode, (unsigned)(Uint8)pr->tm,
+					(unsigned)(Uint8)pr->ts, (unsigned)(Uint8)pr->cgwsel,
+					(unsigned)(Uint8)pr->cgadsub,
+					(unsigned)(pr->inidisp & 0x0F),
+					(unsigned)pr->bg1hofs.w, (unsigned)pr->bg1vofs.w,
+					(unsigned)pr->bg2hofs.w, (unsigned)pr->bg2vofs.w,
+					(unsigned)pr->bg3hofs.w, (unsigned)pr->bg3vofs.w,
+					(unsigned)pr->bg4hofs.w, (unsigned)pr->bg4vofs.w,
+					(unsigned)pr->m7hofs.w, (unsigned)pr->m7vofs.w,
+					(unsigned)(Uint8)pr->bgofslo,
+					(unsigned)(Uint8)pr->bghofslo,
+					(unsigned)(Uint8)pr->m7latch);
+			}
+			#if SNDBG_DEEP
 			DLog("[snes-gsu] ins=%u start/stop/abort/wd=%u/%u/%u/%u max=%u cur=%u plot/rpix=%u/%u ramw=%u",
 				(unsigned)gd.Instructions, (unsigned)gd.Starts,
 				(unsigned)gd.Stops, (unsigned)gd.Aborts,
@@ -1665,6 +1838,12 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 				(unsigned)gd.CacheHits, (unsigned)gd.CacheMisses,
 				(unsigned)gd.BranchesTaken, (unsigned)gd.Branches,
 				(unsigned)gd.Jumps, (unsigned)(m_GSU.IsRunning() ? 1 : 0));
+			#else
+			DLog("[snes-gsu] detail=off start/stop/abort/wd=%u/%u/%u/%u go=%u (use SNES_DIAGNOSTICS=2 for instruction counters)",
+				(unsigned)gd.Starts, (unsigned)gd.Stops,
+				(unsigned)gd.Aborts, (unsigned)gd.Watchdogs,
+				(unsigned)(m_GSU.IsRunning() ? 1 : 0));
+			#endif
 			g_TmgWinFrames  = 0;
 			g_TmgWinSumCyc  = 0;
 			g_TmgWinMaxCyc  = 0;
@@ -1678,6 +1857,19 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			g_TmgWinSumAPU  = 0;
 			g_TmgWinSumMix  = 0;
 			g_TmgWinSumBlend = 0;
+			g_TmgWinSumPPUSync = 0;
+			g_TmgWinSumBGInfo = 0;
+			g_TmgWinSumBGOffset = 0;
+			g_TmgWinSumBGMap = 0;
+			g_TmgWinSumBGChr = 0;
+			g_TmgWinSumBGMain = 0;
+			g_TmgWinSumBGSub = 0;
+			g_TmgWinSumColorMath = 0;
+			g_TmgWinSumObjUpdate = 0;
+			g_TmgWinSumObjFetch = 0;
+			g_TmgWinSumObjDraw = 0;
+			g_TmgWinSumHDMAData = 0;
+			g_TmgWinSumHDMATable = 0;
 			g_TmgDspRd      = 0;
 			g_TmgDspWr      = 0;
 			g_TmgIrqCount   = 0;
@@ -1689,6 +1881,14 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			g_DbgObjEnabledLines = 0;
 			g_DbgObjOamRefs = 0;
 			g_DbgObjTiles = 0;
+			g_DbgObjCacheHits = 0;
+			g_DbgObjCacheMisses = 0;
+			g_DbgObjCacheRefreshes = 0;
+			g_DbgBGCacheHits = 0;
+			g_DbgBGCacheMisses = 0;
+			g_DbgBGCacheRefreshes = 0;
+			g_DbgChrCacheInvalidations = 0;
+			g_DbgAudioSamples = 0;
 			g_DbgObjOpaqueTiles = 0;
 			g_DbgObjCandidatePixels = 0;
 			g_DbgObjDrawnPixels = 0;
@@ -1707,6 +1907,19 @@ void SnesSystem::ExecuteFrame(Emu::SysInputT  *pInput, CRenderSurface *pTarget, 
 			g_DbgDMAWraps = 0;
 			g_DbgDMAMaxBytes = 0;
 			memset(g_DbgDMAModes, 0, sizeof(g_DbgDMAModes));
+			g_DbgHDMAScrollBytes = 0;
+			g_DbgHDMACGRAMBytes = 0;
+			g_DbgHDMAWindowColorBytes = 0;
+			g_DbgHDMAOtherBytes = 0;
+			g_DbgPPUQueuedWrites = 0;
+			g_DbgPPUAppliedWrites = 0;
+			g_DbgPPUQueueFull = 0;
+			g_DbgHDMALines = 0;
+			g_DbgHDMAActiveChannels = 0;
+			g_DbgHDMATransferChannels = 0;
+			g_DbgBGActiveLayers = 0;
+			g_DbgBGMapReloads = 0;
+			g_DbgBGChrRows = 0;
 			m_GSU.ClearDiagWindow();
 		}
 		g_DbgCaptureActive = FALSE;
