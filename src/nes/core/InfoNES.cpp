@@ -40,6 +40,8 @@
 #include "InfoNES_Mapper.h"
 #include "InfoNES_pAPU.h"
 #include "K6502.h"
+#include <time.h>
+#include <stdint.h>
 
 /*-------------------------------------------------------------------*/
 /*  NES resources                                                    */
@@ -241,6 +243,20 @@ BYTE ROM_Trainer;
 /* Four screen VRAM  */
 BYTE ROM_FourScr;
 
+static uint32_t InfoNES_RandomizeMemory( BYTE *pMemory, uint32_t nBytes, uint32_t uSeed )
+{
+  while ( nBytes-- )
+  {
+    uSeed ^= uSeed << 13;
+    uSeed ^= uSeed >> 17;
+    uSeed ^= uSeed << 5;
+
+    *pMemory++ = (BYTE)uSeed;
+  }
+
+  return uSeed;
+}
+
 /*===================================================================*/
 /*                                                                   */
 /*                InfoNES_Init() : Initialize InfoNES                */
@@ -384,9 +400,11 @@ int InfoNES_Reset()
   /*  Initialize resources                                             */
   /*-------------------------------------------------------------------*/
 
-  // Clear RAM
-  InfoNES_MemorySet( RAM, 0xFE, sizeof RAM );
-
+// Randomize RAM
+uint32_t uSeed = (uint32_t)time( NULL );
+uSeed = InfoNES_RandomizeMemory( RAM, sizeof RAM, uSeed );
+if (SRAM_SIZE)
+    uSeed = InfoNES_RandomizeMemory( SRAM, SRAM_SIZE, uSeed );
   // Reset frame skip and frame count
   FrameSkip = 0;
   FrameCnt = 0;
