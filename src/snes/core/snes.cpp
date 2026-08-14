@@ -1059,8 +1059,9 @@ void SnesSystem::Reset()
 	memset(_CPUHackMem, 0, sizeof(_CPUHackMem));
 #endif
 
-memset(m_Ram, 0, sizeof(m_Ram));
-memset(m_SRam, 0, sizeof(m_SRam));
+memset(m_Ram, 0x55, sizeof(m_Ram));
+if (m_uSramSize)
+    memset(m_SRam, 0xFF, m_uSramSize);
 
 	// reset cpu
 	SNCPUReset(&m_Cpu, true);
