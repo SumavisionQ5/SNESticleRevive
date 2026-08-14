@@ -31,7 +31,7 @@ void MainResetEmulator(void);
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 18
+#define VIDEOCFG_VERSION 19
 
 typedef struct
 {
@@ -53,6 +53,8 @@ typedef struct
 	Int32  mx4sioenable; /* MX4SIO (SD via SIO2): 0=off, 1=on         */
 	Int32  colorprofile; /* SNPPU_COLOR_PROFILE_*                     */
 	Int32  famicloneaudio;
+	Int32  fakesramsize;
+	Int32  forceregion;
 } VideoCfgT;
 
 /* v16 is the exact prefix written by v1.0.4 and by the first video-fix
@@ -103,6 +105,28 @@ typedef struct
 {
 	Uint32 magic;
 	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+	Int32  famicloneaudio;
+} VideoCfgV18T;
+
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
 } VideoCfgHeaderT;
 
 static void _VideoCfgPath(char *pOut)
@@ -134,8 +158,10 @@ void VideoSettingsSave(void)
 	cfg.massenable = MassStorageIsEnabled() ? 1 : 0;
 	cfg.smbenable  = SmbSupportIsEnabled() ? 1 : 0;
 	cfg.mx4sioenable = Mx4sioIsEnabled() ? 1 : 0;
-	cfg.colorprofile = SNPPUColorGetProfile();
-cfg.famicloneaudio = g_FamicloneAudio ? 1 : 0;
+		cfg.colorprofile = SNPPUColorGetProfile();
+	cfg.famicloneaudio = g_FamicloneAudio ? 1 : 0;
+	cfg.fakesramsize = g_FakeSRAMSize;
+	cfg.forceregion = g_SnesForceRegion;
 	_VideoCfgPath(path);
 	BgmIOBegin();
 	MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
@@ -157,12 +183,26 @@ void VideoSettingsLoad(void)
 	if (MemCardReadFile(path, (Uint8 *)&header, sizeof(header)) &&
 	    header.magic == VIDEOCFG_MAGIC)
 	{
-		if (header.version == VIDEOCFG_VERSION)
+				if (header.version == VIDEOCFG_VERSION)
 		{
 			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
 		}
-else if (header.version == 17)
-{
+		else if (header.version == 18)
+		{
+			VideoCfgV18T oldcfg18;
+
+			memset(&oldcfg18, 0, sizeof(oldcfg18));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg18, sizeof(oldcfg18)))
+			{
+				memcpy(&cfg, &oldcfg18, sizeof(oldcfg18));
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.fakesramsize = 0;
+				cfg.forceregion = SNES_FORCE_REGION_OFF;
+				loaded = TRUE;
+			}
+		}
+		else if (header.version == 17)
+		{
 	VideoCfgV17T oldcfg17;
 
 	memset(&oldcfg17, 0, sizeof(oldcfg17));
@@ -223,6 +263,27 @@ if (cfg.famicloneaudio == 0 || cfg.famicloneaudio == 1)
 	g_FamicloneAudio = cfg.famicloneaudio ? TRUE : FALSE;
 	InfoNES_pAPUSetDutySwap(g_FamicloneAudio ? 1 : 0);
 }
+		if (cfg.fakesramsize == 0 ||
+		    cfg.fakesramsize == 8 ||
+		    cfg.fakesramsize == 16 ||
+		    cfg.fakesramsize == 32 ||
+		    cfg.fakesramsize == 64 ||
+		    cfg.fakesramsize == 128 ||
+		    cfg.fakesramsize == 256 ||
+		    cfg.fakesramsize == 512 ||
+		    cfg.fakesramsize == 1024 ||
+		    cfg.fakesramsize == 2048 ||
+		    cfg.fakesramsize == 4096)
+		{
+			g_FakeSRAMSize = cfg.fakesramsize;
+		}
+		if (cfg.forceregion == SNES_FORCE_REGION_OFF ||
+		    cfg.forceregion == SNES_FORCE_REGION_NTSC_U ||
+		    cfg.forceregion == SNES_FORCE_REGION_NTSC_J ||
+		    cfg.forceregion == SNES_FORCE_REGION_PAL)
+		{
+			g_SnesForceRegion = cfg.forceregion;
+		}
 	}
 }
 

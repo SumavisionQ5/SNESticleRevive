@@ -24,6 +24,7 @@ Keep in mind: this fork uses **AI-generated code** but it's always tested by me,
 * In-game soft reset (L2+SELECT)
 * Famiclone audio option (swap duty cycles)
 
+*(**NOTE**: to find the options above, go to the Video Settings and change to page 2 with the circle button.)*
 
 **TO BE FIXED:**
 
