@@ -21,7 +21,7 @@ Keep in mind: this fork uses **AI-generated code** but it's always tested by me,
 * Region selector (to intentionally trigger region-lock screens) for SNES games
 * Select SRAM size (to intentionally trigger anti-piracy screens and measures) for SNES games
 * Browse SRAM files
-* In-game soft reset (L2+R2+SELECT)
+* In-game soft reset (L2+SELECT)
 * Famiclone audio option (swap duty cycles)
 
 

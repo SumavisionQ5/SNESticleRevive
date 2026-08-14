@@ -165,6 +165,7 @@ public:
 	SnesPPU();
 
 	void                    Reset();
+	void                    SoftReset();
 	void                    BeginFrame();
 	void                    EndFrame();
 void SetRegionPAL(Bool bPAL);

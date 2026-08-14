@@ -953,6 +953,24 @@ void SnesPPU::Reset()
 	m_Regs.stat78 =  SNPPU_VERSION_5C78; 
 }
 
+void SnesPPU::SoftReset()
+{
+    m_pRender->SetUpdateFlags(SNESPPURENDER_UPDATE_ALL);
+    m_Queue.Reset();
+    m_uLine = 0;
+    m_bVBlank = FALSE;
+
+    /*
+     * Reset only PPU registers/internal state.
+     * VRAM, CGRAM and OAM must survive a soft reset.
+     */
+    memset(&m_Regs, 0, sizeof(m_Regs));
+    m_OAMLatch = 0;
+
+    m_Regs.stat77 = SNPPU_VERSION_5C77;
+    m_Regs.stat78 = SNPPU_VERSION_5C78;
+}
+
 SnesPPU::SnesPPU()
 {
 	m_pRender = NULL;

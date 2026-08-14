@@ -1088,9 +1088,42 @@ if (m_uSramSize)
 
 void SnesSystem::SoftReset()
 {
-	// reset cpu
-	SNCPUReset(&m_Cpu, false);
-	SNSPCReset(&m_Spc, false);
+    /*
+     * Soft reset:
+     * reset the console hardware state without clearing RAM, SRAM,
+     * VRAM, CGRAM or OAM.
+     */
+
+    SetSlowRom();
+
+    m_PPU.SoftReset();
+    m_DMAC.Reset();
+    m_IO.Reset();
+    m_SpcIO.Reset();
+    m_SpcDsp.Reset();
+    m_SpcDspMixer.Reset();
+    m_SpcDspSilentMixer.Reset();
+
+#ifdef SNES_DSP1
+    if (m_pDsp)
+    {
+        m_pDsp->Reset();
+    }
+#endif
+
+    m_OBC1.Reset();
+    m_CX4.Reset();
+    m_GSU.Reset();
+    m_SDD1.Reset();
+
+    /*
+     * Do not randomize or clear main RAM/SRAM here.
+     */
+    SNCPUReset(&m_Cpu, false);
+    SNSPCReset(&m_Spc, false);
+
+    m_uFrame = 0;
+    m_uLine = 0;
 }
 
 

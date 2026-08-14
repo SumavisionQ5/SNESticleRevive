@@ -463,7 +463,7 @@ void _MainLoopInputProcess(Uint32 buttons)
 	else
 	{
 
-if ((buttons & PAD_L2) && (buttons & PAD_R2))
+if ((buttons & PAD_L2))
 	{
 		if (trigger & PAD_SELECT)
 		{
