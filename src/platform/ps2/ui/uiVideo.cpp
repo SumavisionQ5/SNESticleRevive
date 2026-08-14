@@ -19,16 +19,19 @@ extern "C" {
 #include "audmixbuffer.h"
 #include "embedded_irx.h"   /* HddSupportIsEnabled / HddSupportSetEnabled */
 #include "snppucolor.h"
+#include "InfoNES_pAPU.h"
 
 /* mc0:/SNESticle (defined in mainloop_globals.cpp). */
 extern Char _SramPath[256];
+
+void MainResetEmulator(void);
 
 /* ------------------------------------------------------------------ */
 /* Persistence                                                         */
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 17
+#define VIDEOCFG_VERSION 18
 
 typedef struct
 {
@@ -49,6 +52,7 @@ typedef struct
 	Int32  smbenable;  /* historical host slot; now smb: 0=off, 1=on */
 	Int32  mx4sioenable; /* MX4SIO (SD via SIO2): 0=off, 1=on         */
 	Int32  colorprofile; /* SNPPU_COLOR_PROFILE_*                     */
+	Int32  famicloneaudio;
 } VideoCfgT;
 
 /* v16 is the exact prefix written by v1.0.4 and by the first video-fix
@@ -78,6 +82,27 @@ typedef struct
 {
 	Uint32 magic;
 	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+} VideoCfgV17T;
+
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
 } VideoCfgHeaderT;
 
 static void _VideoCfgPath(char *pOut)
@@ -85,6 +110,8 @@ static void _VideoCfgPath(char *pOut)
 	strcpy(pOut, _SramPath);
 	strcat(pOut, "/video.cfg");
 }
+
+static Bool g_FamicloneAudio = FALSE;
 
 void VideoSettingsSave(void)
 {
@@ -108,7 +135,7 @@ void VideoSettingsSave(void)
 	cfg.smbenable  = SmbSupportIsEnabled() ? 1 : 0;
 	cfg.mx4sioenable = Mx4sioIsEnabled() ? 1 : 0;
 	cfg.colorprofile = SNPPUColorGetProfile();
-
+cfg.famicloneaudio = g_FamicloneAudio ? 1 : 0;
 	_VideoCfgPath(path);
 	BgmIOBegin();
 	MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
@@ -134,6 +161,19 @@ void VideoSettingsLoad(void)
 		{
 			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
 		}
+else if (header.version == 17)
+{
+	VideoCfgV17T oldcfg17;
+
+	memset(&oldcfg17, 0, sizeof(oldcfg17));
+	if (MemCardReadFile(path, (Uint8 *)&oldcfg17, sizeof(oldcfg17)))
+	{
+		memcpy(&cfg, &oldcfg17, sizeof(oldcfg17));
+		cfg.version = VIDEOCFG_VERSION;
+		cfg.famicloneaudio = 0;
+		loaded = TRUE;
+	}
+}
 		else if (header.version == 16)
 		{
 			memset(&oldcfg, 0, sizeof(oldcfg));
@@ -178,6 +218,11 @@ void VideoSettingsLoad(void)
 		if (cfg.mx4sioenable == 0 || cfg.mx4sioenable == 1) Mx4sioSetEnabled(cfg.mx4sioenable);
 		if (cfg.colorprofile >= 0 && cfg.colorprofile < SNPPU_COLOR_PROFILE_COUNT)
 			SNPPUColorSetProfile(cfg.colorprofile);
+if (cfg.famicloneaudio == 0 || cfg.famicloneaudio == 1)
+{
+	g_FamicloneAudio = cfg.famicloneaudio ? TRUE : FALSE;
+	InfoNES_pAPUSetDutySwap(g_FamicloneAudio ? 1 : 0);
+}
 	}
 }
 
@@ -273,6 +318,11 @@ static const char *_VideoForceRegionStatus()
         default:
             return "Auto";
     }
+}
+
+static const char *_VideoFamicloneAudioStatus()
+{
+	return g_FamicloneAudio ? "On" : "Off";
 }
 
 static const char *_VideoMx4sioStatus()
@@ -386,7 +436,10 @@ _VideoRow(vy, 15, m_iSelect, "SRAM Size",
 _VideoRow(vy, 16, m_iSelect, "Force Region",
           _VideoForceRegionStatus()); vy += 12;
 
-_VideoRow(vy, 17, m_iSelect, "Reset emulator", ""); vy += 12;
+_VideoRow(vy, 17, m_iSelect, "Famiclone Audio",
+          _VideoFamicloneAudioStatus()); vy += 12;
+
+_VideoRow(vy, 18, m_iSelect, "Reset emulator", ""); vy += 12;
 
 	}
 
@@ -420,7 +473,7 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 
 	{
 		int lo = (m_iSelect >= 10) ? 10 : 0;
-		int hi = (m_iSelect >= 10) ? 17 : 9;
+		int hi = (m_iSelect >= 10) ? 18 : 9;
 		if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < lo) m_iSelect = hi; }
 		if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > hi) m_iSelect = lo; }
 	}
@@ -643,6 +696,10 @@ case 16: /* Force Region */
         }
     }
     break;
+case 17: /* Famiclone Audio */
+    g_FamicloneAudio = !g_FamicloneAudio;
+    InfoNES_pAPUSetDutySwap(g_FamicloneAudio ? 1 : 0);
+    break;
 		}
 
 
@@ -661,9 +718,9 @@ if (trigger & (PAD_CROSS | PAD_START))
 {
     VideoSettingsSave();
 
-    if (m_iSelect == 17)
-    {
-        ExecOSD(0, NULL);
-    }
+if (m_iSelect == 18)
+{
+    MainResetEmulator();
+}
 }
 }

@@ -464,12 +464,13 @@ void _MainLoopInputProcess(Uint32 buttons)
 	{
 
 		if (buttons & PAD_L2)
+	{
+		if (trigger & PAD_SELECT)
 		{
-			if (trigger & PAD_SELECT)
-			{
-				_MainLoop_BlackScreen^=1;
-			}
+			_pSystem->SoftReset();
+			return;
 		}
+	}
 
 #if 0
 		// perform cheesy non-deterministic disk switching

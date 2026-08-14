@@ -284,7 +284,12 @@ void NesSystem::Reset()
 
 void NesSystem::SoftReset()
 {
-    Reset();
+    m_uFrameTick = 0;
+    m_uFrame     = 0;
+    m_uLine      = 0;
+
+    if (m_bRomReady)
+        InfoNES_SoftReset();
 }
 
 

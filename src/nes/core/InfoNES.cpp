@@ -770,6 +770,73 @@ int InfoNES_HSync()
   return 0;
 }
 
+int InfoNES_SoftReset()
+{
+  int nIdx;
+
+  /* Reset PPU registers/state without touching PPURAM or SPRRAM */
+  PPU_R0 = PPU_R1 = PPU_R2 = PPU_R3 = PPU_R7 = 0;
+
+  PPU_Latch_Flag = 0;
+  PPU_UpDown_Clip = 0;
+
+  FrameStep = 0;
+  FrameIRQ_Enable = 0;
+
+  PPU_Scr_V = PPU_Scr_V_Next =
+  PPU_Scr_V_Byte = PPU_Scr_V_Byte_Next =
+  PPU_Scr_V_Bit = PPU_Scr_V_Bit_Next = 0;
+
+  PPU_Scr_H = PPU_Scr_H_Next =
+  PPU_Scr_H_Byte = PPU_Scr_H_Byte_Next =
+  PPU_Scr_H_Bit = PPU_Scr_H_Bit_Next = 0;
+
+  PPU_Addr = 0;
+  PPU_Temp = 0;
+  PPU_Scanline = 0;
+  SpriteJustHit = 0;
+
+  PPU_Increment = 1;
+  PPU_NameTableBank = NAME_TABLE0;
+  PPU_BG_Base = ChrBuf;
+  PPU_SP_Base = ChrBuf + 256 * 64;
+  PPU_SP_Height = 8;
+
+  for (nIdx = 0; nIdx < 16; ++nIdx)
+    PPUBANK[nIdx] = &PPURAM[nIdx * 0x400];
+
+  InfoNES_Mirroring(ROM_Mirroring);
+
+  byVramWriteEnable = (NesHeader.byVRomSize == 0) ? 1 : 0;
+
+  /* Reset APU without clearing emulator memory */
+  InfoNES_pAPUSoftReset();
+
+  /* Reset mapper */
+  for (nIdx = 0; MapperTable[nIdx].nMapperNo != -1; ++nIdx)
+  {
+    if (MapperTable[nIdx].nMapperNo == MapperNo)
+      break;
+  }
+
+  if (MapperTable[nIdx].nMapperNo == -1)
+    return -1;
+
+  MapperTable[nIdx].pMapperInit();
+
+  /* Reset CPU */
+  K6502_Reset();
+
+  FrameSkip = 0;
+  FrameCnt = 0;
+  ChrBufUpdate = 0xff;
+
+  PAD1_Latch = PAD2_Latch = PAD_System = 0;
+  PAD1_Bit = PAD2_Bit = 0;
+
+  return 0;
+}
+
 /*===================================================================*/
 /*                                                                   */
 /*              InfoNES_DrawLine() : Render a scanline               */
