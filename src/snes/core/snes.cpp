@@ -10,7 +10,7 @@
 #include "sntiming.h"
 #include "sndebug.h"
 #include "sndbglog.h"
-#include <time.h>
+
 
 // --- diagnostico de TIMING (ver sndbglog.h) ---
 #if SNDBG_LOG
@@ -157,19 +157,7 @@ static Uint32 SnesDbgHash32(const void *pData, Uint32 nBytes)
 
 
 #define SNES_SYNCPPUEVERYLINE (CODE_DEBUG && 0) 
-static Uint32 SnesRandomizeMemory( Uint8 *pMemory, Uint32 nBytes, Uint32 uSeed )
-{
-    while ( nBytes-- )
-    {
-        uSeed ^= uSeed << 13;
-        uSeed ^= uSeed >> 17;
-        uSeed ^= uSeed << 5;
 
-        *pMemory++ = (Uint8)uSeed;
-    }
-
-    return uSeed;
-}
 
 void SnesSystem::SyncSPC(Int32 uExtra)
 {
@@ -1071,12 +1059,8 @@ void SnesSystem::Reset()
 	memset(_CPUHackMem, 0, sizeof(_CPUHackMem));
 #endif
 
-Uint32 uSeed = (Uint32)time(NULL);
-
-uSeed = SnesRandomizeMemory(m_Ram, sizeof(m_Ram), uSeed);
-
-if (m_uSramSize)
-    uSeed = SnesRandomizeMemory(m_SRam, m_uSramSize, uSeed);
+memset(m_Ram, 0, sizeof(m_Ram));
+memset(m_SRam, 0, sizeof(m_SRam));
 
 	// reset cpu
 	SNCPUReset(&m_Cpu, true);
