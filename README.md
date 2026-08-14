@@ -8,13 +8,14 @@ Changes that prove useful or broadly applicable will be pushed to the main versi
 
 Original project and credits belong to the respective authors. See LICENSE for licensing and attribution details.
 
+Keep in mind: this fork uses **AI-generated code** but it's always tested by me, and I'm a Human according to reCAPTCHA.
+
 **FEATURES ADDED:**
 
 * Fixes and improvements for 240p display mode
 * "Dirty fix" for font rendering in 240p (a better fix should be implemented in the future)
 * Changed SRAM and RAM initialization to fix a few FC games that rely on specific initial values
 * Turbo B/A for NES games
-* Exit to Browser
 * Region selector (trigger region-lock screens)
 * Select SRAM size (trigger the anti-piracy screens/measures)
 
@@ -26,5 +27,6 @@ Original project and credits belong to the respective authors. See LICENSE for l
 **TO BE ADDED:**
 
 * Similar SRAM and RAM initialization for SNES, but I don't know any games that rely on specific initial values yet
+* Exit to Browser
 * Other stupid (or not-so-stupid) ideas I might come up with. Thanks!
 
