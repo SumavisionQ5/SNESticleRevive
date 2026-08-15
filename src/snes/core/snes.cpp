@@ -1059,7 +1059,7 @@ void SnesSystem::Reset()
 	memset(_CPUHackMem, 0, sizeof(_CPUHackMem));
 #endif
 
-memset(m_Ram, 0x55, sizeof(m_Ram));
+memset(m_Ram, 0x00, sizeof(m_Ram));
 if (m_uSramSize)
     memset(m_SRam, 0xFF, m_uSramSize);
 
@@ -1104,11 +1104,20 @@ void SnesSystem::SoftReset()
     /*
      * Do not randomize or clear main RAM/SRAM here.
      */
-    SNCPUReset(&m_Cpu, false);
-    SNSPCReset(&m_Spc, false);
+SNCPUResetCounters(&m_Cpu);
+SNSPCResetCounters(&m_Spc);
 
-    m_uFrame = 0;
-    m_uLine = 0;
+SNCPUReset(&m_Cpu, false);
+m_Cpu.Regs.rS.w = 0x01FF;
+m_Cpu.Regs.rDP = 0;
+m_Cpu.Regs.rDB = 0;
+m_Cpu.Regs.rX.b.h = 0;
+m_Cpu.Regs.rY.b.h = 0;
+
+SNSPCReset(&m_Spc, false);
+
+m_uFrame = 0;
+m_uLine = 0;
 }
 
 
