@@ -1,4 +1,4 @@
-name: Build PS2
+name: Continuous Release
 
 on:
   push:
@@ -6,6 +6,13 @@ on:
     tags: [ 'v*' ]
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: continuous-release
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -15,16 +22,14 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-
       - name: Build
         run: make AUTO_INSTALL=yes
-
-      - name: List build outputs
-        run: ls -la build/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SNESticleRevive-PS2
-          path: build/*.elf
-          if-no-files-found: error
+      - name: Continuous release
+        # AURORA_PICODRIVE_NO_PUBLIC_COMBINED_ELF: licensing safety.
+        # CI may build/test PicoDrive but this step must not publish the linked ELF.
+        # if: ${{ false }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete continuous --cleanup-tag --yes || true
+          gh release create continuous build/SNESticle.elf --target "$GITHUB_SHA" --title "Continuous Build" --prerelease --notes "Automatically built from the latest commit on main."
