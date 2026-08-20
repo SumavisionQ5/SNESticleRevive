@@ -9,9 +9,11 @@ SNESticle Aurora is based on **SNESticle Revive by @ReyFxck (Thomas R.)**, whose
 <!-- AURORA_QUICKNES_CREDIT -->
 NES emulation through **QuickNES** is based on the **QuickNES core originally by Shay Green**, with the libretro core maintained by **libretro contributors**. Aurora uses `itsveenee/QuickNES_Core` as a pinned Git submodule for its PS2 integration. See [THIRD_PARTY.md](THIRD_PARTY.md) and the license notices inside the QuickNES submodule.
 
+Mega Drive and Master System emulation through **PicoDrive** is based on the PicoDrive emulator originally by **@notaz**, with its libretro core maintained by **@irixxxx and libretro contributors**. Aurora uses `itsveenee/picodrive` as a pinned Git submodule for its PS2 integration. See [THIRD_PARTY.md](THIRD_PARTY.md) and the license notices inside the PicoDrive submodule.
+
 SNESticle Aurora focuses on 240p CRT output, NES/QuickNES integration and experiments, real PS2 hardware, accuracy and compatibility improvements, and other hardware-specific or experimental ideas.
 
-**Any changes made in SNESticle Aurora are also available to anyone** who wants to cherry-pick, pull, or otherwise incorporate them into SNESticle Revive or any other fork as they see fit.
+**Changes made in SNESticle Aurora may be reused, cherry-picked, pulled or incorporated into other projects subject to the applicable licenses.** Aurora code covered by the GPL remains under GNU GPLv2; separately licensed third-party components remain under their own terms.
 
 Project lineage and attribution are documented in [CREDITS.md](CREDITS.md). See LICENSE and the third-party license files for licensing details.
 
@@ -39,14 +41,15 @@ If the repository was cloned without `--recurse-submodules`, run
 
 Emulation:
 
-* QuickNES for NES games
+* NES emulation with QuickNES
 * Support added for more NES mappers: 13, 16, 18, 27, 48, 64, 65, 67, 68, 72, 77, 80, 82, 92, 96, 99, 101, 105, 118, 119, 151, 153, 155, 157, 158, 159, 185, 188, 210, 216, and 552. Every licensed NES and Famicom game will boot now.
 * Changed SRAM and RAM initialization for both NES and SNES. This will fix all the very few games that rely on specific initial values to work properly.
+* Experimental Mega Drive / Genesis + Sega Master System / Mark III + Game Gear emulation with PicoDrive
 * Fixes and improvements for the 240p display modes, improved screen positioning and overscan settings for each system and graphical resolution/modes.
-* Turbo B/A for NES games
-* Turbo toggle (hold R2+ANY BUTTON) for SNES games
+* Turbo B/A for NES and SMS games
+* Turbo toggle (hold R2+ANY BUTTON) for SNES and MD games
 * In-game soft reset (L2+SELECT)
-* SNES mouse emulation
+* SNES and MD mouse emulation
 
 User interface:
 
@@ -62,7 +65,7 @@ User interface:
 
 Just for fun:
 
-* Famiclone audio option (swap duty cycles, a known hardware bug in some Famiclones you can intentionally turn on)
+* Famiclone audio option for NES games (swap duty cycles, a known hardware bug in some Famiclones you can intentionally turn on)
 * Region selector (to intentionally trigger region-lock screens) for SNES games
 * Select SRAM size (to intentionally trigger anti-piracy screens and measures) for SNES games
 

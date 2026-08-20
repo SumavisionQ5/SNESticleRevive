@@ -19,6 +19,7 @@
 #include "mainloop_state.h"
 #include "mainloop_exec.h"
 #include "mainloop_iop.h"
+#include "sega/picodrive/picodrive_bridge.h"
 #include "gskit_backend.h"
 
 #include "types.h"
@@ -119,9 +120,11 @@ Bool MainLoopProcess()
 		Int32 iPad;
 
 		/* AURORA_AUTO_SNES_MOUSE_V1_5
-		 * Mouse replaces only SNES gameplay port 1. Pads remain polled for
-		 * menus and frontend hotkeys. */
-		if (_pSystem == _pSnes && InputSnesMouseShouldUse())
+		 * Mouse replaces gameplay port 1 on SNES and non-8-bit Sega.
+		 * Pads remain polled for menus and frontend hotkeys. */
+		if ((_pSystem == _pSnes ||
+		     (_pSystem == _pSega && !PicoDriveBridge_Is8Bit())) &&
+		    InputSnesMouseShouldUse())
 		{
 			bSnesMouse = TRUE;
 			InputGetMouseData(&nSnesMouseX, &nSnesMouseY, &uSnesMouseButtons);
@@ -263,6 +266,33 @@ Bool MainLoopProcess()
                 TextureUpload(&_OutTex, pSurface->GetLinePtr(0));
                 PROF_LEAVE("NesTexUpload");
             }
+            else if (_pSystem == _pSega)
+            {
+                /* AURORA_PICODRIVE_STAGE2_EXECUTE */
+                Bool bDirectMd = PicoDriveBridge_CanDirectGsVideo()
+                               ? TRUE : FALSE;
+
+                PicoDriveBridge_SetRegion((int)g_SnesForceRegion);
+                PicoDriveBridge_SetMouseInput(
+                    bSnesMouse ? true : false,
+                    (int)nSnesMouseX,
+                    (int)nSnesMouseY,
+                    (unsigned)uSnesMouseButtons);
+
+                PROF_ENTER("SegaExecuteFrame");
+                /* AURORA_PD_DIRECT_T8_EXECUTE */
+                _pSega->ExecuteFrame(
+                    &Input, bDirectMd ? NULL : pSurface, pMixBuffer, eMode);
+                PROF_LEAVE("SegaExecuteFrame");
+
+                if (!bDirectMd)
+                {
+                    /* SMS/GG/32X retain the proven RGBA path. */
+                    PROF_ENTER("SegaTexUpload");
+                    TextureUpload(&_OutTex, pSurface->GetLinePtr(0));
+                    PROF_LEAVE("SegaTexUpload");
+                }
+            }
             else
             {
                 /* AURORA_MEGA_V2_SNES_AUDIO_CLOCK
@@ -301,11 +331,14 @@ Bool MainLoopProcess()
 
 	MainLoopRender();
 
-	/* AURORA_MOUSE_EXPLICIT_V3: no SIF mouse RPC in Off/Controller,
-	   menus, or NES. First resumed USB frame only drains stale motion. */
+	/* AURORA_MOUSE_EXPLICIT_V4: no SIF mouse RPC in Off/Controller,
+	   menus, NES, SMS or GG. First resumed USB frame only drains stale motion. */
 	{
 		Bool bUsbGameplay =
-			(!_bMenu && _pSystem == _pSnes && !_MainLoop_BlackScreen &&
+			(!_bMenu &&
+			 (_pSystem == _pSnes ||
+			  (_pSystem == _pSega && !PicoDriveBridge_Is8Bit())) &&
+			 !_MainLoop_BlackScreen &&
 			 InputSnesMouseGetMode() == INPUT_SNES_MOUSE_USB) ? TRUE : FALSE;
 		if (bUsbGameplay)
 			InputMousePollPostFrame(_UsbMouseGameplayWasActive ? TRUE : FALSE);
