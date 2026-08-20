@@ -9,20 +9,29 @@
 #include "poly.h"
 #include "uiVideo.h"
 #include "snrom.h"
+#include "snes.h"
 extern "C" {
 #include "gskit_backend.h"
+#include "gpfifo.h"
+#include "ps2dma.h"
+#include "audio.h"
 }
 #include "memcard.h"
 #include "uiCover.h"
 #include "mainloop_bgm.h"
+#include "mainloop_state.h"
+#include "mainloop_input.h"
+#include "input.h"
 #include "mainloop_smb.h"
 #include "audmixbuffer.h"
 #include "embedded_irx.h"   /* HddSupportIsEnabled / HddSupportSetEnabled */
 #include "snppucolor.h"
-#include "InfoNES_pAPU.h"
+#include "snppurender.h"
+#include "nes/quicknes/quicknes_bridge.h" /* QUICKNES_FAMICLONE_HOOK */
 
 /* mc0:/SNESticle (defined in mainloop_globals.cpp). */
 extern Char _SramPath[256];
+extern SnesSystem *_pSnes;
 
 void MainResetEmulator(void);
 
@@ -31,7 +40,24 @@ void MainResetEmulator(void);
 /* ------------------------------------------------------------------ */
 
 #define VIDEOCFG_MAGIC   0x53564944u   /* 'SVID' */
-#define VIDEOCFG_VERSION 19
+#define VIDEOCFG_VERSION 31
+/* v31 establishes Menu Volume UI 100 (internal 200) as the migration
+ * default for every older config. Once saved as v31+, the user's selected
+ * Menu Volume persists normally. */
+/* v30 fixes the temporary v29 Menu Audio defaults:
+ * Menu Volume defaults to internal 200 (UI 100) and Menu Music to Off.
+ * Once saved as v30, both settings persist independently. */
+/* v29 changes Menu Volume semantics to match Game Volume:
+ * internal 0..400, UI displays /2 (0..200). v28 is byte-compatible. */
+/* v27 changes only Game Volume semantics: gamevol is now internal 0..400
+ * and the UI displays gamevol/2. v26 remains byte-compatible and migrates. */
+/* AURORA_AUG19_BUNDLE_V3: v26 appends Turbo Speed + CPU Overclock. */
+/* AURORA_CONFIG_V24_STORAGE_OBJ_LIMIT_MODE
+ * v24 appends OBJ limiter mode. v23 imports its limiter/storage fields and
+ * defaults the new mode to Per Scanline; v21/v22 retain exact import. */
+/* AURORA_V85_SOFTWARE_HACKS_CONFIG
+ * v20 only appends renderer-hack preferences. Old configs migrate with all
+ * hacks disabled and all layers enabled. */
 
 typedef struct
 {
@@ -43,9 +69,9 @@ typedef struct
 	Int32  overscan;
 	Int32  widescreen;
 	Int32  covers;
-	Int32  bgmvol;     /* volume da trilha de menu: 0=off, 1..100 */
+	Int32  bgmvol;     /* ganho interno da trilha: 0..400; UI /2 */
 	Int32  bgmrate;    /* frequencia de sintese da trilha (Hz)     */
-	Int32  gamevol;    /* volume do audio do jogo (SNES/NES): 0..100 */
+	Int32  gamevol;    /* ganho interno do jogo (SNES/NES): 0..400; UI /2 */
 	Int32  hddenable;  /* suporte ao HD interno (hdd0:): 0=off, 1=on  */
 	Int32  mmceenable; /* suporte a MMCE (mmce0/1): 0=off, 1=on       */
 	Int32  massenable; /* mass/USB (mass0/1): 0=off, 1=on             */
@@ -55,6 +81,16 @@ typedef struct
 	Int32  famicloneaudio;
 	Int32  fakesramsize;
 	Int32  forceregion;
+	Int32  sneshacklayersoff;
+	Int32  sneshackflags;
+	Int32  compatflags;
+	Int32  objlimit;
+	Int32  sramdevice;
+	Int32  objlimitmode;
+	Int32  snesmousemode;
+	Int32  turbospeed;
+	Int32  cpuoverclock;
+	Int32  bgmenable;   /* Menu Music: 0=off, 1=on */
 } VideoCfgT;
 
 /* v16 is the exact prefix written by v1.0.4 and by the first video-fix
@@ -123,6 +159,155 @@ typedef struct
 	Int32  famicloneaudio;
 } VideoCfgV18T;
 
+/* Exact on-card layout written by v19. */
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+	Int32  famicloneaudio;
+	Int32  fakesramsize;
+	Int32  forceregion;
+} VideoCfgV19T;
+
+/* Exact on-card layout written by v20 (V8.5). */
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+	Int32  famicloneaudio;
+	Int32  fakesramsize;
+	Int32  forceregion;
+	Int32  sneshacklayersoff;
+	Int32  sneshackflags;
+} VideoCfgV20T;
+
+/* Exact byte layout written by v21 and v22. */
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+	Int32  famicloneaudio;
+	Int32  fakesramsize;
+	Int32  forceregion;
+	Int32  sneshacklayersoff;
+	Int32  sneshackflags;
+	Int32  compatflags;
+} VideoCfgV22T;
+
+
+/* Exact byte layout written by Aurora video.cfg v24. */
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+	Int32  famicloneaudio;
+	Int32  fakesramsize;
+	Int32  forceregion;
+	Int32  sneshacklayersoff;
+	Int32  sneshackflags;
+	Int32  compatflags;
+	Int32  objlimit;
+	Int32  sramdevice;
+	Int32  objlimitmode;
+} VideoCfgV24T;
+
+/* Exact byte layout written by Aurora video.cfg v25. */
+typedef struct
+{
+	VideoCfgV24T v24;
+	Int32 snesmousemode;
+} VideoCfgV25T;
+
+/* Exact byte layout written by Aurora V1/V1.1 (video.cfg v23). */
+typedef struct
+{
+	Uint32 magic;
+	Int32  version;
+	Int32  mode;
+	Int32  offx;
+	Int32  offy;
+	Int32  overscan;
+	Int32  widescreen;
+	Int32  covers;
+	Int32  bgmvol;
+	Int32  bgmrate;
+	Int32  gamevol;
+	Int32  hddenable;
+	Int32  mmceenable;
+	Int32  massenable;
+	Int32  smbenable;
+	Int32  mx4sioenable;
+	Int32  colorprofile;
+	Int32  famicloneaudio;
+	Int32  fakesramsize;
+	Int32  forceregion;
+	Int32  sneshacklayersoff;
+	Int32  sneshackflags;
+	Int32  compatflags;
+	Int32  objlimit;
+	Int32  sramdevice;
+} VideoCfgV23T;
+
 typedef struct
 {
 	Uint32 magic;
@@ -136,6 +321,29 @@ static void _VideoCfgPath(char *pOut)
 }
 
 static Bool g_FamicloneAudio = FALSE;
+
+/* AURORA_COMPAT_PAGE_V21
+ * Zero flags = exact V8.5 host behavior. */
+#define VIDEO_COMPAT_GS_FULL_CACHE   (1 << 0)
+#define VIDEO_COMPAT_GIF_LONG_WAIT   (1 << 1)
+#define VIDEO_COMPAT_AUDIO_SMALL_RPC (1 << 2)
+#define VIDEO_COMPAT_AUDIO_DEEP_Q    (1 << 3)
+#define VIDEO_COMPAT_ALL             0x0F
+
+static Int32 g_VideoCompatFlags = 0;
+
+static void _VideoApplyCompatFlags(Int32 flags)
+{
+	g_VideoCompatFlags = flags & VIDEO_COMPAT_ALL;
+	GPFifoSetCompatFullCache(
+		(g_VideoCompatFlags & VIDEO_COMPAT_GS_FULL_CACHE) ? TRUE : FALSE);
+	DmaSetGifCompatLongWait(
+		(g_VideoCompatFlags & VIDEO_COMPAT_GIF_LONG_WAIT) ? TRUE : FALSE);
+	Aud_SetCompatSmallChunks(
+		(g_VideoCompatFlags & VIDEO_COMPAT_AUDIO_SMALL_RPC) ? 1 : 0);
+	Aud_SetCompatDeepQueue(
+		(g_VideoCompatFlags & VIDEO_COMPAT_AUDIO_DEEP_Q) ? 1 : 0);
+}
 
 void VideoSettingsSave(void)
 {
@@ -151,6 +359,7 @@ void VideoSettingsSave(void)
 	cfg.widescreen = g_GskWidescreen;
 	cfg.covers     = CoverIsEnabled() ? 1 : 0;
 	cfg.bgmvol     = BgmGetVolume();
+	cfg.bgmenable  = BgmIsEnabled() ? 1 : 0;
 	cfg.bgmrate    = BgmGetRate();
 	cfg.gamevol    = AudMixGameGetVolume();
 	cfg.hddenable  = HddSupportIsEnabled() ? 1 : 0;
@@ -162,6 +371,18 @@ void VideoSettingsSave(void)
 	cfg.famicloneaudio = g_FamicloneAudio ? 1 : 0;
 	cfg.fakesramsize = g_FakeSRAMSize;
 	cfg.forceregion = g_SnesForceRegion;
+	cfg.sneshacklayersoff =
+		(~SNPPURenderGetSoftwareLayerMask()) &
+		(SNESPPU_MASK_BG1 | SNESPPU_MASK_BG2 | SNESPPU_MASK_BG3 |
+		 SNESPPU_MASK_BG4 | SNESPPU_MASK_OBJ);
+	cfg.sneshackflags = SNPPURenderGetSoftwareHackFlags();
+	cfg.compatflags = g_VideoCompatFlags & VIDEO_COMPAT_ALL;
+	cfg.objlimit = SNPPURenderGetObjLimitLevel();
+	cfg.sramdevice = MainLoopSramGetDevice();
+	cfg.objlimitmode = SNPPURenderGetObjLimitMode();
+	cfg.snesmousemode = (Int32)InputSnesMouseGetMode();
+	cfg.turbospeed = (Int32)MainLoopTurboGetSpeed();
+	cfg.cpuoverclock = SNCPU_OVERCLOCK_OFF;
 	_VideoCfgPath(path);
 	BgmIOBegin();
 	MemCardWriteFile(path, (Uint8 *)&cfg, sizeof(cfg));
@@ -177,6 +398,17 @@ void VideoSettingsLoad(void)
 	Bool      loaded = FALSE;
 
 	memset(&cfg, 0, sizeof(cfg));
+	SNPPURenderSetSoftwareLayerMask(
+		SNESPPU_MASK_BG1 | SNESPPU_MASK_BG2 | SNESPPU_MASK_BG3 |
+		SNESPPU_MASK_BG4 | SNESPPU_MASK_OBJ);
+	SNPPURenderSetSoftwareHackFlags(SNPPU_HACK_MODE7_HALF);
+	SNPPURenderSetObjLimitLevel(SNPPU_OBJ_LIMIT_OFF);
+	SNPPURenderSetObjLimitMode(SNPPU_OBJ_LIMIT_MODE_SCANLINE);
+	MainLoopSramSetDevice(MAINLOOP_SRAMDEVICE_AUTO);
+	InputSnesMouseSetMode(INPUT_SNES_MOUSE_OFF);
+	MainLoopTurboSetSpeed(MAINLOOP_TURBO_SPEED_NORMAL);
+	SNCPUSetOverclockLevel(_pSnes ? _pSnes->GetCpu() : NULL, SNCPU_OVERCLOCK_OFF);
+	_VideoApplyCompatFlags(0);
 	_VideoCfgPath(path);
 
 	memset(&header, 0, sizeof(header));
@@ -186,6 +418,125 @@ void VideoSettingsLoad(void)
 				if (header.version == VIDEOCFG_VERSION)
 		{
 			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
+		}
+		else if (header.version == 30)
+		{
+			/* v30 has the same byte layout as v31. */
+			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
+			if (loaded) cfg.version = VIDEOCFG_VERSION;
+		}
+		else if (header.version == 29)
+		{
+			/* v29 was a temporary test config with broken menu-audio defaults.
+			 * Import its layout, then reset only those two settings once. */
+			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
+			if (loaded)
+			{
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.bgmvol = 200;   /* UI 100 */
+				cfg.bgmenable = 0;  /* Off */
+			}
+		}
+		else if (header.version == 28)
+		{
+			/* v28 has the same byte layout; only Menu Volume semantics changed. */
+			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg));
+			if (loaded) cfg.version = VIDEOCFG_VERSION;
+		}
+		else if (header.version == 27)
+		{
+			/* v27 is the v28/v29 prefix without bgmenable. */
+			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg) - sizeof(Int32));
+			if (loaded) cfg.version = VIDEOCFG_VERSION;
+		}
+		else if (header.version == 26)
+		{
+			/* v26 has the same byte layout; only Game Volume semantics changed. */
+			loaded = MemCardReadFile(path, (Uint8 *)&cfg, sizeof(cfg) - sizeof(Int32));
+			if (loaded) cfg.version = VIDEOCFG_VERSION;
+		}
+		else if (header.version == 25)
+		{
+			VideoCfgV25T oldcfg25;
+			memset(&oldcfg25, 0, sizeof(oldcfg25));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg25, sizeof(oldcfg25)))
+			{
+				memcpy(&cfg, &oldcfg25, sizeof(oldcfg25));
+				cfg.version = VIDEOCFG_VERSION;
+				switch (oldcfg25.snesmousemode)
+				{
+					case 1: cfg.snesmousemode = INPUT_SNES_MOUSE_CONTROLLER; break;
+					case 3: cfg.snesmousemode = INPUT_SNES_MOUSE_USB; break;
+					default: cfg.snesmousemode = INPUT_SNES_MOUSE_OFF; break;
+				}
+				cfg.turbospeed = MAINLOOP_TURBO_SPEED_NORMAL;
+				cfg.cpuoverclock = SNCPU_OVERCLOCK_OFF;
+				loaded = TRUE;
+			}
+		}
+		else if (header.version == 24)
+		{
+			VideoCfgV24T oldcfg24;
+			memset(&oldcfg24, 0, sizeof(oldcfg24));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg24, sizeof(oldcfg24)))
+			{
+				memcpy(&cfg, &oldcfg24, sizeof(oldcfg24));
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.snesmousemode = INPUT_SNES_MOUSE_OFF;
+				loaded = TRUE;
+			}
+		}
+		else if (header.version == 23)
+		{
+			VideoCfgV23T oldcfg23;
+			memset(&oldcfg23, 0, sizeof(oldcfg23));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg23, sizeof(oldcfg23)))
+			{
+				memcpy(&cfg, &oldcfg23, sizeof(oldcfg23));
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.objlimitmode = SNPPU_OBJ_LIMIT_MODE_SCANLINE;
+				loaded = TRUE;
+			}
+		}
+		else if (header.version == 22 || header.version == 21)
+		{
+			VideoCfgV22T oldcfg22;
+			memset(&oldcfg22, 0, sizeof(oldcfg22));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg22, sizeof(oldcfg22)))
+			{
+				memcpy(&cfg, &oldcfg22, sizeof(oldcfg22));
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.objlimit = SNPPU_OBJ_LIMIT_OFF;
+				cfg.sramdevice = MAINLOOP_SRAMDEVICE_AUTO;
+				cfg.objlimitmode = SNPPU_OBJ_LIMIT_MODE_SCANLINE;
+				loaded = TRUE;
+			}
+		}
+		else if (header.version == 20)
+		{
+			VideoCfgV20T oldcfg20;
+			memset(&oldcfg20, 0, sizeof(oldcfg20));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg20, sizeof(oldcfg20)))
+			{
+				memcpy(&cfg, &oldcfg20, sizeof(oldcfg20));
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.compatflags = 0;
+				loaded = TRUE;
+			}
+		}
+		else if (header.version == 19)
+		{
+			VideoCfgV19T oldcfg19;
+
+			memset(&oldcfg19, 0, sizeof(oldcfg19));
+			if (MemCardReadFile(path, (Uint8 *)&oldcfg19, sizeof(oldcfg19)))
+			{
+				memcpy(&cfg, &oldcfg19, sizeof(oldcfg19));
+				cfg.version = VIDEOCFG_VERSION;
+				cfg.sneshacklayersoff = 0;
+				cfg.sneshackflags = 0;
+				loaded = TRUE;
+			}
 		}
 		else if (header.version == 18)
 		{
@@ -228,6 +579,34 @@ void VideoSettingsLoad(void)
 		}
 	}
 
+	/* v27 and older had no independent Menu Music switch.
+	 * New default policy is Off; Menu Volume remains independent. */
+	if (loaded && header.version <= 27)
+		cfg.bgmenable = 0;
+
+	/* v26 and older stored Game Volume as the old 0..100 UI value.
+	 * Preserve the audible setting (old 100 -> internal 200 -> UI 100). */
+	if (loaded && header.version <= 26 &&
+	    cfg.gamevol >= 0 && cfg.gamevol <= 100)
+		cfg.gamevol *= 2;
+
+	/* v28 and older stored Menu Volume directly as 0..100.
+	 * v29 uses the same convention as Game Volume:
+	 * old 100 -> internal 200 -> UI still shows 100. */
+	if (loaded && header.version <= 28 &&
+	    cfg.bgmvol >= 0 && cfg.bgmvol <= 100)
+		cfg.bgmvol *= 2;
+
+	/* v31 establishes a clean Menu Volume default for every older config.
+	 * UI 100 == internal 200. From v31 onward, preserve the saved value. */
+	if (loaded && header.version <= 30)
+		cfg.bgmvol = 200;
+
+	/* New policy applies exactly once to every pre-v22 config. Once the
+	 * user saves v22, a manual Full selection remains persistent. */
+	if (loaded && header.version < 22)
+		cfg.sneshackflags |= SNPPU_HACK_MODE7_HALF;
+
 	if (loaded && cfg.magic == VIDEOCFG_MAGIC)
 	{
 		/* v1.0.2 allowed both SIO2 storage hooks to be saved at once.
@@ -248,9 +627,10 @@ void VideoSettingsLoad(void)
 		if (cfg.overscan >= 0 && cfg.overscan <= 100) g_GskOverscan = cfg.overscan;
 		if (cfg.widescreen == 0 || cfg.widescreen == 1) g_GskWidescreen = cfg.widescreen;
 		if (cfg.covers == 0 || cfg.covers == 1) CoverSetEnabled(cfg.covers ? TRUE : FALSE);
-		if (cfg.bgmvol >= 0 && cfg.bgmvol <= 100) BgmSetVolume(cfg.bgmvol);
+		if (cfg.bgmvol >= 0 && cfg.bgmvol <= 400) BgmSetVolume(cfg.bgmvol);
+		if (cfg.bgmenable == 0 || cfg.bgmenable == 1) BgmSetEnabled(cfg.bgmenable);
 		if (cfg.bgmrate >= 8000 && cfg.bgmrate <= 48000) BgmSetRate(cfg.bgmrate);
-		if (cfg.gamevol >= 0 && cfg.gamevol <= 100) AudMixGameSetVolume(cfg.gamevol);
+		if (cfg.gamevol >= 0 && cfg.gamevol <= 400) AudMixGameSetVolume(cfg.gamevol);
 		if (cfg.hddenable == 0 || cfg.hddenable == 1) HddSupportSetEnabled(cfg.hddenable);
 		if (cfg.mmceenable == 0 || cfg.mmceenable == 1) MmceSupportSetEnabled(cfg.mmceenable);
 		if (cfg.massenable == 0 || cfg.massenable == 1) MassStorageSetEnabled(cfg.massenable);
@@ -261,7 +641,7 @@ void VideoSettingsLoad(void)
 if (cfg.famicloneaudio == 0 || cfg.famicloneaudio == 1)
 {
 	g_FamicloneAudio = cfg.famicloneaudio ? TRUE : FALSE;
-	InfoNES_pAPUSetDutySwap(g_FamicloneAudio ? 1 : 0);
+	QuicknesBridge_SetDutySwap(g_FamicloneAudio ? true : false);
 }
 		if (cfg.fakesramsize == 0 ||
 		    cfg.fakesramsize == 8 ||
@@ -272,8 +652,7 @@ if (cfg.famicloneaudio == 0 || cfg.famicloneaudio == 1)
 		    cfg.fakesramsize == 256 ||
 		    cfg.fakesramsize == 512 ||
 		    cfg.fakesramsize == 1024 ||
-		    cfg.fakesramsize == 2048 ||
-		    cfg.fakesramsize == 4096)
+		    cfg.fakesramsize == 2048)
 		{
 			g_FakeSRAMSize = cfg.fakesramsize;
 		}
@@ -284,8 +663,39 @@ if (cfg.famicloneaudio == 0 || cfg.famicloneaudio == 1)
 		{
 			g_SnesForceRegion = cfg.forceregion;
 		}
+
+		const Int32 uLayerBits =
+			SNESPPU_MASK_BG1 | SNESPPU_MASK_BG2 | SNESPPU_MASK_BG3 |
+			SNESPPU_MASK_BG4 | SNESPPU_MASK_OBJ;
+		if ((cfg.sneshacklayersoff & ~uLayerBits) == 0)
+			SNPPURenderSetSoftwareLayerMask(
+				(Uint8)(uLayerBits & ~cfg.sneshacklayersoff));
+		if ((cfg.sneshackflags & ~SNPPU_HACK_ALL) == 0)
+			SNPPURenderSetSoftwareHackFlags((Uint8)cfg.sneshackflags);
+		if (cfg.objlimit >= SNPPU_OBJ_LIMIT_OFF && cfg.objlimit < SNPPU_OBJ_LIMIT_NUM)
+			SNPPURenderSetObjLimitLevel((Uint8)cfg.objlimit);
+		if (cfg.objlimitmode >= SNPPU_OBJ_LIMIT_MODE_SCANLINE &&
+		    cfg.objlimitmode < SNPPU_OBJ_LIMIT_MODE_NUM)
+			SNPPURenderSetObjLimitMode((Uint8)cfg.objlimitmode);
+		if (cfg.sramdevice >= MAINLOOP_SRAMDEVICE_AUTO &&
+		    cfg.sramdevice < MAINLOOP_SRAMDEVICE_NUM)
+			MainLoopSramSetDevice((MainLoopSramDeviceE)cfg.sramdevice);
+		if ((cfg.compatflags & ~VIDEO_COMPAT_ALL) == 0)
+			_VideoApplyCompatFlags(cfg.compatflags);
+		if (cfg.snesmousemode >= INPUT_SNES_MOUSE_OFF &&
+		    cfg.snesmousemode < INPUT_SNES_MOUSE_MODE_NUM)
+			InputSnesMouseSetMode(
+				(InputSnesMouseModeE)cfg.snesmousemode);
+		if (cfg.turbospeed >= MAINLOOP_TURBO_SPEED_NORMAL &&
+		    cfg.turbospeed < MAINLOOP_TURBO_SPEED_NUM)
+			MainLoopTurboSetSpeed((MainLoopTurboSpeedE)cfg.turbospeed);
+		SNCPUSetOverclockLevel(_pSnes ? _pSnes->GetCpu() : NULL,
+		                         SNCPU_OVERCLOCK_OFF);
 	}
 }
+
+/* AURORA_MOUSE_VIDEO_COMPAT_V1 */
+/* SNES Mouse lives on Video Config 4/4 and uses Left/Right. */
 
 /* ------------------------------------------------------------------ */
 /* Screen                                                              */
@@ -385,6 +795,81 @@ static const char *_VideoFamicloneAudioStatus()
 	return g_FamicloneAudio ? "On" : "Off";
 }
 
+static const char *_VideoHackLayerStatus(Uint8 uLayer)
+{
+	return (SNPPURenderGetSoftwareLayerMask() & uLayer) ? "On" : "Off";
+}
+
+static const char *_VideoHackAccurateStatus(Uint8 uFlag)
+{
+	return (SNPPURenderGetSoftwareHackFlags() & uFlag) ? "Off" : "Accurate";
+}
+
+static const char *_VideoHackMode7Status()
+{
+	return (SNPPURenderGetSoftwareHackFlags() & SNPPU_HACK_MODE7_HALF)
+		? "Half" : "Full";
+}
+
+static const char *_VideoHackSpriteLimiterStatus()
+{
+	switch (SNPPURenderGetObjLimitLevel())
+	{
+		case SNPPU_OBJ_LIMIT_LIGHT:   return "Light (28)";
+		case SNPPU_OBJ_LIMIT_MEDIUM:  return "Medium (24)";
+		case SNPPU_OBJ_LIMIT_STRONG:  return "Strong (20)";
+		case SNPPU_OBJ_LIMIT_EXTREME: return "Extreme (16)";
+		default:                      return "Off (34)";
+	}
+}
+
+static const char *_VideoHackSpriteLimiterModeStatus()
+{
+	return SNPPURenderGetObjLimitMode() == SNPPU_OBJ_LIMIT_MODE_SCREEN
+		? "Per Screen" : "Per Scanline";
+}
+
+static const char *_VideoHackFrameSkipStatus()
+{
+	return (SNPPURenderGetSoftwareHackFlags() & SNPPU_HACK_FRAME_SKIP)
+		? "1" : "Off";
+}
+
+static const char *_VideoHackCpuOverclockStatus()
+{
+	switch (SNCPUGetOverclockLevel())
+	{
+		case SNCPU_OVERCLOCK_120: return "120%";
+		case SNCPU_OVERCLOCK_150: return "150%";
+		case SNCPU_OVERCLOCK_200: return "200%";
+		case SNCPU_OVERCLOCK_300: return "300%";
+		default:                  return "Off";
+	}
+}
+
+static const char *_VideoCompatProfileStatus()
+{
+	if (g_VideoCompatFlags == 0) return "Standard";
+	if (g_VideoCompatFlags == VIDEO_COMPAT_ALL) return "Conservative";
+	return "Custom";
+}
+static const char *_VideoCompatGsCacheStatus()
+{
+	return (g_VideoCompatFlags & VIDEO_COMPAT_GS_FULL_CACHE) ? "Full" : "Range";
+}
+static const char *_VideoCompatGifWaitStatus()
+{
+	return (g_VideoCompatFlags & VIDEO_COMPAT_GIF_LONG_WAIT) ? "Long" : "Normal";
+}
+static const char *_VideoCompatAudioRpcStatus()
+{
+	return (g_VideoCompatFlags & VIDEO_COMPAT_AUDIO_SMALL_RPC) ? "1 KB" : "4 KB";
+}
+static const char *_VideoCompatAudioQueueStatus()
+{
+	return (g_VideoCompatFlags & VIDEO_COMPAT_AUDIO_DEEP_Q) ? "Deep" : "Normal";
+}
+
 static const char *_VideoMx4sioStatus()
 {
 	if (!Mx4sioIsEnabled())       return "Off";
@@ -421,7 +906,11 @@ void CVideoScreen::Draw()
 	char  buf[16];
 	int   m = _VideoModeIndex(g_GskVideoMode);
 	const char *pMode = _VideoModes[m].name;
-	bool  bDevices = (m_iSelect >= 10);  /* pagina 2/2 = dispositivos */
+	/* AURORA_V85_SOFTWARE_HACKS_PAGE */
+	/* Display order: page 1 = 0..9, page 2 = 30..38,
+	 * page 3 = 20..29, page 4 = 10..19. */
+	int   iPage = (m_iSelect >= 30) ? 1 :
+	              ((m_iSelect >= 20) ? 2 : ((m_iSelect >= 10) ? 3 : 0));
 	const char *pWide = "Off";
 	const char *pColor = (SNPPUColorGetProfile() == SNPPU_COLOR_PROFILE_COMPOSITE)
 	                   ? "Composite" : "Original";
@@ -431,10 +920,14 @@ void CVideoScreen::Draw()
 
 	FontSelect(0);
 
-	_VideoHeader(vy, bDevices ? "Video Config (2/2)" : "Video Config (1/2)");
+	_VideoHeader(vy,
+		iPage == 0 ? "Settings Menu (1/4)" :
+		iPage == 1 ? "Settings Menu (2/4)" :
+		iPage == 2 ? "Settings Menu (3/4)" :
+		             "Settings Menu (4/4)");
 	vy += 18;
 
-	if (!bDevices) {
+	if (iPage == 0) {
 	_VideoHeader(vy, "Screen");
 	vy += 14;
 
@@ -457,23 +950,23 @@ void CVideoScreen::Draw()
 
 	_VideoHeader(vy, "Audio"); vy += 14;
 
-	snprintf(buf, sizeof(buf), "%d", AudMixGameGetVolume());
+	snprintf(buf, sizeof(buf), "%d", AudMixGameGetVolume() / 2);
 	_VideoRow(vy, 7, m_iSelect, "Game Volume", buf); vy += 12;
 
+	snprintf(buf, sizeof(buf), "%d", BgmGetVolume() / 2);
+	_VideoRow(vy, 8, m_iSelect, "Menu Volume", buf); vy += 12;
 	{
-		int bv = BgmGetVolume();
-		if (bv <= 0)                 snprintf(buf, sizeof(buf), "Off");
+		const char *musicStatus;
+		if (!BgmIsEnabled())
+			musicStatus = "Off";
 		else if (BgmTrackCount() <= 0)
-			snprintf(buf, sizeof(buf),
-			         BgmIsSearching() ? "Searching" : "No Track");
-		else                         snprintf(buf, sizeof(buf), "%d", bv);
+			musicStatus = BgmIsSearching() ? "Searching" : "No Track";
+		else
+			musicStatus = "On";
+		_VideoRow(vy, 9, m_iSelect, "Menu Music", musicStatus); vy += 12;
 	}
-	_VideoRow(vy, 8, m_iSelect, "Menu Music", buf); vy += 12;
-
-	snprintf(buf, sizeof(buf), "%d kHz", (BgmGetRate() + 500) / 1000);
-	_VideoRow(vy, 9, m_iSelect, "Frequency", buf); vy += 12;
 	}
-	else
+	else if (iPage == 3)
 	{
 		_VideoHeader(vy, "Storage / Devices"); vy += 14;
 
@@ -500,14 +993,63 @@ _VideoRow(vy, 17, m_iSelect, "Famiclone Audio",
           _VideoFamicloneAudioStatus()); vy += 12;
 
 _VideoRow(vy, 18, m_iSelect, "Reset emulator", ""); vy += 12;
+_VideoRow(vy, 19, m_iSelect, "Exit to OSD", ""); vy += 12;
 
+	}
+	else if (iPage == 2)
+	{
+		_VideoHeader(vy, "Software Hacks"); vy += 14;
+		_VideoRow(vy, 20, m_iSelect, "BG1 Layer",
+			_VideoHackLayerStatus(SNESPPU_MASK_BG1)); vy += 12;
+		_VideoRow(vy, 21, m_iSelect, "BG2 Layer",
+			_VideoHackLayerStatus(SNESPPU_MASK_BG2)); vy += 12;
+		_VideoRow(vy, 22, m_iSelect, "BG3 Layer",
+			_VideoHackLayerStatus(SNESPPU_MASK_BG3)); vy += 12;
+		_VideoRow(vy, 23, m_iSelect, "BG4 Layer",
+			_VideoHackLayerStatus(SNESPPU_MASK_BG4)); vy += 12;
+		_VideoRow(vy, 24, m_iSelect, "Sprites / OBJ",
+			_VideoHackLayerStatus(SNESPPU_MASK_OBJ)); vy += 12;
+		_VideoRow(vy, 25, m_iSelect, "Color Math",
+			_VideoHackAccurateStatus(SNPPU_HACK_COLOR_MATH_OFF)); vy += 12;
+		_VideoRow(vy, 26, m_iSelect, "Window Effects",
+			_VideoHackAccurateStatus(SNPPU_HACK_WINDOWS_OFF)); vy += 12;
+		_VideoRow(vy, 27, m_iSelect, "Mode 7 Quality",
+			_VideoHackMode7Status()); vy += 12;
+		_VideoRow(vy, 28, m_iSelect, "Sprite Limiter",
+			_VideoHackSpriteLimiterStatus()); vy += 12;
+		_VideoRow(vy, 29, m_iSelect, "Limiter Mode",
+			_VideoHackSpriteLimiterModeStatus()); vy += 12;
+	}
+	else
+	{
+		_VideoHeader(vy, "Performance"); vy += 14;
+		_VideoRow(vy, 30, m_iSelect, "Profile",
+			_VideoCompatProfileStatus()); vy += 12;
+		_VideoRow(vy, 31, m_iSelect, "GS Cache Sync",
+			_VideoCompatGsCacheStatus()); vy += 12;
+		_VideoRow(vy, 32, m_iSelect, "GIF DMA Wait",
+			_VideoCompatGifWaitStatus()); vy += 12;
+		_VideoRow(vy, 33, m_iSelect, "Audio RPC Chunk",
+			_VideoCompatAudioRpcStatus()); vy += 12;
+		_VideoRow(vy, 34, m_iSelect, "Audio Queue",
+			_VideoCompatAudioQueueStatus()); vy += 12;
+		snprintf(buf, sizeof(buf), "%d kHz", (BgmGetRate() + 500) / 1000);
+		_VideoRow(vy, 35, m_iSelect, "Frequency", buf); vy += 12;
+		_VideoRow(vy, 36, m_iSelect, "Frame Skip",
+			_VideoHackFrameSkipStatus()); vy += 12;
+
+		_VideoHeader(vy, "Controller options"); vy += 14;
+		_VideoRow(vy, 37, m_iSelect, "SNES Mouse",
+			InputSnesMouseGetModeName()); vy += 12;
+		_VideoRow(vy, 38, m_iSelect, "Turbo Speed",
+			MainLoopTurboGetSpeedName()); vy += 12;
 	}
 
 	/* controls / hints (clear of the vy=215 footer) */
 	vy = 184;
 	FontColor4f(0.6f, 0.6f, 0.6f, 1.0f);
 	_VideoCenter(128, vy, "Up/Dn: select   L/R: change   X: save"); vy += 12;
-	_VideoCenter(128, vy, "O (Circle): switch page"); vy += 12;
+	_VideoCenter(128, vy, "O: next   Square: previous"); vy += 12;
 
 	if (g_GskVideoMode != GSK_GetActiveVideoMode())
 	{
@@ -525,15 +1067,21 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 {
 	int dir = 0;
 
-	/* Circle (O) alterna entre as 2 paginas: Video/Audio (idx 0-9) e
-	   Devices (10-14). NAO uso L1/R1 aqui de proposito -- eles ja trocam
-	   de ABA no nivel global (Browser/Network/Menu/Log/Video). */
+	/* Circle: Video/Audio -> Performance -> Software Hacks -> Devices/Misc. */
 	if (trigger & PAD_CIRCLE)
-		m_iSelect = (m_iSelect >= 10) ? 0 : 10;
+	{
+		if (m_iSelect < 10)       m_iSelect = 30;
+		else if (m_iSelect < 20)  m_iSelect = 0;
+		else if (m_iSelect < 30)  m_iSelect = 10;
+		else                      m_iSelect = 20;
+	}
 
 	{
-		int lo = (m_iSelect >= 10) ? 10 : 0;
-		int hi = (m_iSelect >= 10) ? 18 : 9;
+		int lo, hi;
+		if (m_iSelect < 10)      { lo = 0;  hi = 9;  }
+		else if (m_iSelect < 20) { lo = 10; hi = 19; }
+		else if (m_iSelect < 30) { lo = 20; hi = 29; }
+		else                     { lo = 30; hi = 38; }
 		if (trigger & PAD_UP)    { m_iSelect--; if (m_iSelect < lo) m_iSelect = hi; }
 		if (trigger & PAD_DOWN)  { m_iSelect++; if (m_iSelect > hi) m_iSelect = lo; }
 	}
@@ -592,26 +1140,26 @@ void CVideoScreen::Input(Uint32 buttons, Uint32 trigger)
 			CoverToggle();
 			break;
 
-		case 7: /* game (emulator) audio volume 0..100, step 1, live */
+		case 7: /* UI 0..200; internal gain 0..400, step 2 => UI step 1 */
 			{
-				int v = AudMixGameGetVolume() + dir;
+				int v = AudMixGameGetVolume() + dir * 2;
 				if (v < 0)   v = 0;
-				if (v > 100) v = 100;
+				if (v > 400) v = 400;
 				AudMixGameSetVolume(v);
 			}
 			break;
 
-		case 8: /* menu music volume 0..100 (0 = off), step 1, live */
+		case 8: /* UI 0..200; internal gain 0..400, step 2 => UI step 1 */
 			{
-				int v = BgmGetVolume() + dir;
+				int v = BgmGetVolume() + dir * 2;
 				if (v < 0)   v = 0;
-				if (v > 100) v = 100;
+				if (v > 400) v = 400;
 				BgmSetVolume(v);
 			}
 			break;
 
-		case 9: /* frequencia de sintese da trilha (cicla a lista) */
-			BgmCycleRate(dir);
+		case 9: /* Menu Music on/off; Menu Volume remains independent. */
+			BgmSetEnabled(!BgmIsEnabled());
 			break;
 
 		case 10: /* Mass / USB on/off -- lista mass0:/mass1: (USB).  O USB core
@@ -664,7 +1212,7 @@ case 15: /* SRAM Size */
     switch (g_FakeSRAMSize)
     {
         case 0:
-            g_FakeSRAMSize = (dir > 0) ? 8 : 4096;
+            g_FakeSRAMSize = (dir > 0) ? 8 : 2048;
             break;
 
         case 8:
@@ -700,12 +1248,8 @@ case 15: /* SRAM Size */
             break;
 
         case 2048:
-            g_FakeSRAMSize = (dir > 0) ? 4096 : 1024;
-            break;
-
-        case 4096:
         default:
-            g_FakeSRAMSize = (dir > 0) ? 0 : 2048;
+            g_FakeSRAMSize = (dir > 0) ? 0 : 1024;
             break;
     }
     break;
@@ -758,29 +1302,109 @@ case 16: /* Force Region */
     break;
 case 17: /* Famiclone Audio */
     g_FamicloneAudio = !g_FamicloneAudio;
-    InfoNES_pAPUSetDutySwap(g_FamicloneAudio ? 1 : 0);
+    QuicknesBridge_SetDutySwap(g_FamicloneAudio ? true : false);
     break;
+
+		case 20: case 21: case 22: case 23: case 24:
+		{
+			static const Uint8 kLayers[5] = {
+				SNESPPU_MASK_BG1, SNESPPU_MASK_BG2, SNESPPU_MASK_BG3,
+				SNESPPU_MASK_BG4, SNESPPU_MASK_OBJ
+			};
+			Uint8 uMask = SNPPURenderGetSoftwareLayerMask();
+			uMask ^= kLayers[m_iSelect - 20];
+			SNPPURenderSetSoftwareLayerMask(uMask);
+			break;
+		}
+		case 25:
+			SNPPURenderSetSoftwareHackFlags(
+				SNPPURenderGetSoftwareHackFlags() ^ SNPPU_HACK_COLOR_MATH_OFF);
+			break;
+		case 26:
+			SNPPURenderSetSoftwareHackFlags(
+				SNPPURenderGetSoftwareHackFlags() ^ SNPPU_HACK_WINDOWS_OFF);
+			break;
+		case 27:
+			SNPPURenderSetSoftwareHackFlags(
+				SNPPURenderGetSoftwareHackFlags() ^ SNPPU_HACK_MODE7_HALF);
+			break;
+		case 28:
+			{
+				Int32 level = (Int32)SNPPURenderGetObjLimitLevel() + dir;
+				if (level < 0) level = SNPPU_OBJ_LIMIT_NUM - 1;
+				if (level >= SNPPU_OBJ_LIMIT_NUM) level = 0;
+				SNPPURenderSetObjLimitLevel((Uint8)level);
+			}
+			break;
+		case 29:
+			{
+				Int32 mode = (Int32)SNPPURenderGetObjLimitMode() + dir;
+				if (mode < 0) mode = SNPPU_OBJ_LIMIT_MODE_NUM - 1;
+				if (mode >= SNPPU_OBJ_LIMIT_MODE_NUM) mode = 0;
+				SNPPURenderSetObjLimitMode((Uint8)mode);
+			}
+			break;
+		case 30:
+			_VideoApplyCompatFlags(
+				g_VideoCompatFlags == VIDEO_COMPAT_ALL ? 0 : VIDEO_COMPAT_ALL);
+			break;
+		case 31:
+			_VideoApplyCompatFlags(
+				g_VideoCompatFlags ^ VIDEO_COMPAT_GS_FULL_CACHE);
+			break;
+		case 32:
+			_VideoApplyCompatFlags(
+				g_VideoCompatFlags ^ VIDEO_COMPAT_GIF_LONG_WAIT);
+			break;
+		case 33:
+			_VideoApplyCompatFlags(
+				g_VideoCompatFlags ^ VIDEO_COMPAT_AUDIO_SMALL_RPC);
+			break;
+		case 34:
+			_VideoApplyCompatFlags(
+				g_VideoCompatFlags ^ VIDEO_COMPAT_AUDIO_DEEP_Q);
+			break;
+		case 35: /* Menu-music synthesis frequency / performance. */
+			BgmCycleRate(dir);
+			break;
+		case 36:
+			SNPPURenderSetSoftwareHackFlags(
+				SNPPURenderGetSoftwareHackFlags() ^ SNPPU_HACK_FRAME_SKIP);
+			break;
+		case 37:
+			InputSnesMouseCycleModeDir(dir);
+			break;
+		case 38:
+			MainLoopTurboCycleSpeedDir(dir);
+			break;
 		}
 
 
 	}
 
-	/* Square: reset the display offset (live). */
+	/* Square: previous page in the displayed 1 -> 2 -> 3 -> 4 order. */
 	if (trigger & PAD_SQUARE)
 	{
-		g_GskDispOffX = 0;
-		g_GskDispOffY = 0;
-		GSK_SetDisplayOffset(0, 0);
+		if (m_iSelect >= 30)      m_iSelect = 0;
+		else if (m_iSelect >= 20) m_iSelect = 30;
+		else if (m_iSelect >= 10) m_iSelect = 20;
+		else                      m_iSelect = 10;
 	}
 
-/* Cross / Start: persist all video settings to the memory card. */
+/* Cross / Start: persist ordinary settings; immediate actions never save. */
 if (trigger & (PAD_CROSS | PAD_START))
 {
-    VideoSettingsSave();
-
-if (m_iSelect == 18)
-{
-    MainResetEmulator();
-}
+    if (m_iSelect == 18)
+    {
+        if (Aud_IsInitialized()) Aud_Setvol(0);
+        MainResetEmulator();
+    }
+    else if (m_iSelect == 19)
+    {
+        if (Aud_IsInitialized()) Aud_Setvol(0);
+        ExecOSD(0, NULL);
+    }
+    else
+        VideoSettingsSave();
 }
 }

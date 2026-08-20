@@ -7,6 +7,7 @@
 #include "file.h"
 #include "mainloop_exec.h"
 #include "mainloop_shared.h"
+#include "snppurender.h" /* AURORA_V85_FRAME_SKIP_RENDER_ONLY */
 
 /* MAINLOOP_SNESSTATEDEBUG lives in mainloop_shared.h (included above). */
 
@@ -28,12 +29,15 @@ Bool _ExecuteSnes(CRenderSurface *pSurface, CMixBuffer *pMixBuffer, Emu::SysInpu
 
             #if !MAINLOOP_SNESSTATEDEBUG
 //            pMixBuffer=NULL;
-//            SNCPUSetExecuteFunc(SNCPUExecute_C);
+            /* CPU overclock UI removed: always use the original ASM core. */
             SNCPUSetExecuteFunc(SNCPUExecute_ASM);
             SNSPCSetExecuteFunc(SNSPCExecute_C);
 
 		    PROF_ENTER("SnesExecuteFrame");
-  		    _pSystem->ExecuteFrame(pInput, pSurface, pMixBuffer, eMode);
+			/* Skip presentation only; emulation still executes every frame. */
+			CRenderSurface *pFrameSurface =
+				(pSurface && SNPPURenderShouldRenderFrame()) ? pSurface : NULL;
+		    _pSystem->ExecuteFrame(pInput, pFrameSurface, pMixBuffer, eMode);
 		    PROF_LEAVE("SnesExecuteFrame");
             #else
 

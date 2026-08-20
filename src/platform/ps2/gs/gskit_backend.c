@@ -41,6 +41,11 @@ static GSGLOBAL *_pGsGlobal = NULL;
 static int       _gsk_initialised = 0;
 static int       _gsk_invalidate_pending = 0;
 
+/* AURORA_GS_LATENCY_V1
+ * Off by default: every caller that does not explicitly opt into the gameplay
+ * fast-clear path retains the exact historical full-frame clear. */
+static Bool      _gsk_gameplay_fast_clear = FALSE;
+
 /* Video mode + display offset (selectable in the Settings screen).
    480i is the safe default and 1080i is the only alternate output. */
 int g_GskVideoMode = GSK_VIDMODE_480I;
@@ -52,6 +57,7 @@ static int _gsk_vck         = 4;   /* display-offset VCK units            */
 static int _gsk_fb_width    = 640; /* active FB width                     */
 static int _gsk_fb_height   = 480; /* active FB height                    */
 static int _gsk_active_mode = GSK_VIDMODE_480I; /* mode the GS is in now   */
+static int _gsk_native240p_par = 0;
 
 /* gsKit's computed DISPLAY params, captured after gsKit_init_screen so
    overscan/widescreen can be recomputed from a clean baseline. */
@@ -69,6 +75,26 @@ GSGLOBAL *GSK_GetGlobal(void)
 {
     return _pGsGlobal;
 }
+
+/* AURORA_MEGA_V2_GS_REFRESH_IMPL
+ * PS2 NTSC VBlank is the 59.94-family clock, not exactly 60.000 Hz. Feeding
+ * this rational to the audio mixer prevents a slow ring-buffer phase drift.
+ */
+void GSK_GetRefreshRate(Uint32 *pNumerator, Uint32 *pDenominator)
+{
+    if (!pNumerator || !pDenominator) return;
+    if (_pGsGlobal && _pGsGlobal->Mode == GS_MODE_PAL)
+    {
+        *pNumerator = 50;
+        *pDenominator = 1;
+    }
+    else
+    {
+        *pNumerator = 60000;
+        *pDenominator = 1001;
+    }
+}
+
 
 /* Detect the console's TV region from the BIOS ROMVER region byte.
  *
@@ -319,6 +345,52 @@ static void _GskApplyDisplay(void)
         starty = _gsk_base_starty + sy;
     }
 
+    /*
+     * NES/SNES 240p horizontal PAR correction.
+     *
+     * Do NOT scale the 256x240 framebuffer. Instead reduce the PCRTC
+     * horizontal magnification by one integer step while continuing
+     * to scan all 256 framebuffer pixels.
+     *
+     * In NTSC/PAL 240p with a 256-pixel framebuffer gsKit normally
+     * resolves to 11 VCK units per framebuffer pixel (MagH = 10).
+     * Use 10 VCK units (MagH = 9) for native 256-wide gameplay. Every source pixel therefore
+     * remains exactly the same physical width as every other source pixel:
+     * no 256->248 resampling pattern, no uneven columns.
+     */
+    if (_gsk_native240p_par &&
+        _gsk_active_mode == GSK_VIDMODE_240P &&
+        g_GskOverscan == 0 &&
+        _gsk_base_magh > 0)
+    {
+        int old_magh1 = _gsk_base_magh + 1;
+        int new_magh1 = old_magh1 - 1;
+        int srcpix    = _gsk_base_dw / old_magh1;
+        int new_dw    = srcpix * new_magh1;
+
+        /*
+         * Shift native NES/SNES 240p output two logical pixels left.
+         * new_magh1 is 10 here, so 2 source pixels = 20 PCRTC units.
+         * Do this at scanout level so no framebuffer columns are clipped.
+         */
+        startx += (dw - new_dw) / 2 - (2 * new_magh1);
+        dw      = new_dw;
+        magh    = new_magh1 - 1;
+
+        /*
+         * SNESTICLE_NATIVE_240P_Y_BIAS
+         *
+         * Hardware-tested CRT position.
+         * Equivalent to menu Offset Y = +3.
+         *
+         * Unlike horizontal X, gsKit's vertical display offset is
+         * already expressed directly in PCRTC vertical units.
+         * Keep this at scanout level: no framebuffer crop and no
+         * PolyRect/source-coordinate modification.
+         */
+        starty += 1;
+    }
+
     /* Widescreen: stretch the picture horizontally to ~16:9 by raising
        the horizontal magnification (MAGH) and the display width (DW)
        together, while still reading the SAME framebuffer pixels.  This
@@ -373,6 +445,17 @@ void GSK_SetWidescreen(int on)
     _GskApplyDisplay();
 }
 
+void GSK_SetNative240pPar(int on)
+{
+    on = on ? 1 : 0;
+
+    if (_gsk_native240p_par == on)
+        return;
+
+    _gsk_native240p_par = on;
+    _GskApplyDisplay();
+}
+
 void GSK_ReinitVideo(void)
 {
     if (!_gsk_initialised) {
@@ -416,6 +499,35 @@ void GSK_DrainAndWait(void)
     gsKit_queue_exec(_pGsGlobal);
     gsKit_finish();
     DmaSyncGIF();
+}
+
+/* AURORA_GS_RAWGIF_DRAIN_V1
+ *
+ * This is intentionally narrower than GSK_DrainAndWait().
+ *
+ * gsKit_queue_exec() appends a FINISH command to its queue. Waiting for that
+ * FINISH here forces the EE to sit idle until the GS has rasterized every
+ * preceding primitive. For a producer switch on the SAME GIF/path-3 channel,
+ * that is stronger than necessary: DmaSyncGIF() is sufficient to ensure the
+ * previous EE DMA source is no longer active before we start the raw chain.
+ * The GIF/GS command stream itself remains FIFO-ordered, so raw commands cannot
+ * overtake the earlier gsKit packets.
+ *
+ * Keep GSK_DrainAndWait() untouched for callers that genuinely request full
+ * GS completion. */
+void GSK_DrainForRawGif(void)
+{
+    if (!_gsk_initialised) {
+        return;
+    }
+
+    gsKit_queue_exec(_pGsGlobal);
+    DmaSyncGIF();
+}
+
+void GSK_SetGameplayFastClear(Bool enabled)
+{
+    _gsk_gameplay_fast_clear = enabled ? TRUE : FALSE;
 }
 
 void GSK_FlushFrame(void)
@@ -518,12 +630,40 @@ void GSK_ResetFrame(void)
     *p_data++ = (u64)1;
     *p_data++ = (u64)GS_REG_COLCLAMP;
 
-    /* Clear the complete PHYSICAL framebuffer, not only the transformed
-       256x240 canvas, so overscan borders never retain stale pixels. */
+    /* Clear policy.
+     *
+     * Menu/boot/black-screen: retain the historical full physical clear.
+     *
+     * Gameplay: MainLoopRender immediately draws the game texture across the
+     * complete framebuffer width and all the way to the bottom edge. Current
+     * layouts leave at most 16 physical rows uncovered at the top (SNES in the
+     * 640x480 source). Clear 32 rows for a 2x safety margin, then restore the
+     * full scissor before any later primitive. Nothing visible is left stale;
+     * we simply avoid rasterizing black underneath pixels that the game blit
+     * overwrites later in the same queue.
+     *
+     * AURORA_GS_PARTIAL_GAMEPLAY_CLEAR_V1 */
     {
         u8 previous_alpha = gs->PrimAlphaEnable;
         gs->PrimAlphaEnable = GS_SETTING_OFF;
-        gsKit_clear(gs, 0);
+
+        if (_gsk_gameplay_fast_clear && gs->Width > 0 && gs->Height > 0)
+        {
+            int clear_rows = (gs->Height < 32) ? gs->Height : 32;
+            u64 top_scissor = GS_SETREG_SCISSOR(
+                0, gs->Width - 1, 0, clear_rows - 1);
+            u64 full_scissor = GS_SETREG_SCISSOR(
+                0, gs->Width - 1, 0, gs->Height - 1);
+
+            gsKit_set_scissor(gs, top_scissor);
+            gsKit_clear(gs, 0);
+            gsKit_set_scissor(gs, full_scissor);
+        }
+        else
+        {
+            gsKit_clear(gs, 0);
+        }
+
         gs->PrimAlphaEnable = previous_alpha;
     }
 }

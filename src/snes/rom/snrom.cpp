@@ -9,6 +9,234 @@
 Uint32 g_FakeSRAMSize = 0;
 SnesForceRegionE g_SnesForceRegion = SNES_FORCE_REGION_OFF;
 
+/* AURORA_SONIC_BLAST_MAN_COLOR_V7
+ * Runtime-only renderer compatibility flag. It is reset on every ROM load.
+ * No Sonic Blast Man ROM byte is modified. */
+Bool g_SnesCompatSonicBlastManColorMath = FALSE;
+
+/* AURORA_CRC_ZERO_INIT_DB_V8
+ * Set from the normalized/headerless ROM CRC before any in-memory ROM patch.
+ * SnesSystem consumes it only while attaching a new cartridge. */
+Bool g_SnesCompatZeroInit = FALSE;
+
+/* AURORA_HK97_SPC_BOOT_DB_V9
+ * Exact-CRC runtime flag for Hong Kong '97. This does not patch ROM bytes.
+ * Both known 512 KiB images are accepted:
+ *   11A6E64B = standard PD image
+ *   C6A95816 = CM variant
+ */
+Bool g_SnesCompatHongKong97SPCBoot = FALSE;
+
+/* AURORA_TOP_GEAR_FASTROM_V1
+ * Exact clean normalized/headerless ROMs only. No ROM bytes are modified. */
+Bool g_SnesCompatTopGearFastRom = FALSE;
+
+#ifndef SNES_HK97_SPC_BOOT
+#define SNES_HK97_SPC_BOOT 1
+#endif
+
+#if SNES_HK97_SPC_BOOT
+static Uint32 _SNRomHK97CRC32(const Uint8 *pData, Uint32 nBytes)
+{
+    Uint32 crc = 0xFFFFFFFFu;
+    while (nBytes--)
+    {
+        crc ^= *pData++;
+        for (Uint32 bit = 0; bit < 8; ++bit)
+            crc = (crc >> 1) ^ ((crc & 1) ? 0xEDB88320u : 0u);
+    }
+    return crc ^ 0xFFFFFFFFu;
+}
+#endif
+
+/* AURORA_CRC_COMPAT_DB_V6
+ * Tiny CRC-gated ROM compatibility database.
+ *
+ * Sources represented here:
+ *   - SNESAdvance SuperDAT ordinary-byte patches for Lost Vikings 1 (USA)
+ *     and The Addams Family (USA).
+ *   - GameHacking.org-generated Lost Vikings 2 cheat data; Snes9x's standard
+ *     SNES Game Genie decoder maps E1E7-CFD4 -> $80FA34=F6 and
+ *     DDE7-CF04 -> $80FA35=00. For normal LoROM $80:FA34 maps to file $7A34.
+ *   - No-Intro 2026-08-01 CRC32 values identify clean regional layouts.
+ *
+ * Cross-region entries intentionally reuse the same payload/offsets. They are
+ * exact-CRC isolated and can all be disabled with SNES_ROM_COMPAT_REGIONAL=0.
+ */
+#ifndef SNES_ROM_COMPAT_PATCHES
+#define SNES_ROM_COMPAT_PATCHES 1
+#endif
+#ifndef SNES_ROM_COMPAT_REGIONAL
+#define SNES_ROM_COMPAT_REGIONAL 1
+#endif
+#ifndef SNES_CRC_ZERO_INIT
+#define SNES_CRC_ZERO_INIT 1
+#endif
+#ifndef SNES_TOP_GEAR_FASTROM_HACK
+#define SNES_TOP_GEAR_FASTROM_HACK 1
+#endif
+
+#if SNES_CRC_ZERO_INIT || SNES_TOP_GEAR_FASTROM_HACK
+/* AURORA_CRC_ZERO_INIT_DB_V8
+ * Exact CRC32 allow-list. CRC is computed after copier-header removal /
+ * deinterleaving and before V6 mutates any ROM bytes.
+ *
+ * Included:
+ *   Hong Kong '97 (standard + CM)
+ *   Lost Vikings 1 (U/E/F/G/S/J)
+ *   Lost Vikings 2 (U/E)
+ *   The Addams Family (U/E/J)
+ *   Sonic Blast Man (U/E/J)
+ *   Speedy Gonzales - Los Gatos Bandidos (USA + Rev 1)
+ *   Top Gear / Top Racer (U/E/J)
+ *   Super Mario World 2 - Yoshi's Island / Yossy Island (U/E/J revisions)
+ *
+ * Pilotwings is intentionally NOT included:
+ *   USA 266C44ED, Japan 77871727, Europe DEF45776.
+ */
+static Uint32 _SNRomZeroInitCRC32(const Uint8 *pData, Uint32 nBytes)
+{
+    Uint32 crc = 0xFFFFFFFFu;
+    while (nBytes--)
+    {
+        crc ^= *pData++;
+        for (Uint32 bit = 0; bit < 8; ++bit)
+            crc = (crc >> 1) ^ ((crc & 1) ? 0xEDB88320u : 0u);
+    }
+    return crc ^ 0xFFFFFFFFu;
+}
+
+static Bool _SNRomNeedsZeroInit(Uint32 crc)
+{
+    switch (crc)
+    {
+        /* Hong Kong '97 */
+        case 0x11A6E64Bu:
+        case 0xC6A95816u:
+
+        /* The Lost Vikings 1 */
+        case 0x6838BE08u:
+        case 0x66989491u:
+        case 0x94093298u:
+        case 0x4EE705ABu:
+        case 0x6E8A1081u:
+        case 0x50FEF979u:
+
+        /* The Lost Vikings 2 / Norse by Norsewest */
+        case 0x3AA01DBDu:
+        case 0x3C49A285u:
+
+        /* The Addams Family */
+        case 0x2E8034ABu:
+        case 0x82497F19u:
+        case 0xCD80351Cu:
+
+        /* Sonic Blast Man */
+        case 0x8886396Eu:
+        case 0x5441F25Bu:
+        case 0xBE523800u:
+
+        /* Speedy Gonzales - Los Gatos Bandidos */
+        case 0xE2DBAD76u:
+        case 0xCB0653D0u:
+
+        /* Top Gear / Top Racer */
+        case 0xD34C49B7u:
+        case 0xB0150052u:
+        case 0xE5A57B12u:
+
+        /* Super Mario World 2 - Yoshi's Island */
+        case 0xD138F224u:
+        case 0xCF98DDAAu:
+        case 0x857980B2u:
+        case 0x07E01EF9u:
+        case 0x343E0DFBu:
+        case 0x0F66698Bu:
+        case 0xF1063FADu:
+            return TRUE;
+
+        default:
+            return FALSE;
+    }
+}
+#endif
+
+#if SNES_ROM_COMPAT_PATCHES
+struct SNRomCompatWriteT
+{
+    Uint32 Offset;
+    Uint8 Data0;
+    Uint8 Data1;
+};
+
+struct SNRomCompatEntryT
+{
+    Uint32 CRC32;
+    Uint32 RomBytes;
+    const SNRomCompatWriteT *pWrites;
+    Uint8 nWrites;
+};
+
+static Uint32 _SNRomCompatCRC32(const Uint8 *pData, Uint32 nBytes)
+{
+    Uint32 crc = 0xFFFFFFFFu;
+    while (nBytes--)
+    {
+        crc ^= *pData++;
+        for (Uint32 bit = 0; bit < 8; ++bit)
+            crc = (crc >> 1) ^ ((crc & 1) ? 0xEDB88320u : 0u);
+    }
+    return crc ^ 0xFFFFFFFFu;
+}
+
+static const SNRomCompatWriteT _SNRomCompat_LostVikings1[] =
+{
+    { 0x28D83u, 0xEA, 0xEA },
+    { 0x28DF6u, 0xEA, 0xEA },
+    { 0x28E09u, 0xEA, 0xEA },
+};
+
+static const SNRomCompatWriteT _SNRomCompat_AddamsFamily[] =
+{
+    { 0x014E9u, 0xEA, 0xEA },
+    { 0x07870u, 0xEA, 0xEA },
+    { 0x0789Du, 0xEA, 0xEA },
+};
+
+static const SNRomCompatWriteT _SNRomCompat_LostVikings2SkipIntro[] =
+{
+    /* $80FA34=F6, $80FA35=00 -> LoROM file offset $7A34. */
+    { 0x07A34u, 0xF6, 0x00 },
+};
+
+static const SNRomCompatEntryT _SNRomCompatEntries[] =
+{
+    /* Payload documented directly for these USA layouts. */
+    { 0x6838BE08u, 0x100000u, _SNRomCompat_LostVikings1,
+      (Uint8)(sizeof(_SNRomCompat_LostVikings1) / sizeof(_SNRomCompat_LostVikings1[0])) },
+    { 0x2E8034ABu, 0x100000u, _SNRomCompat_AddamsFamily,
+      (Uint8)(sizeof(_SNRomCompat_AddamsFamily) / sizeof(_SNRomCompat_AddamsFamily[0])) },
+    { 0x3AA01DBDu, 0x100000u, _SNRomCompat_LostVikings2SkipIntro,
+      (Uint8)(sizeof(_SNRomCompat_LostVikings2SkipIntro) / sizeof(_SNRomCompat_LostVikings2SkipIntro[0])) },
+
+#if SNES_ROM_COMPAT_REGIONAL
+    /* Lost Vikings 1: Europe, France, Germany, Spain, Japan. */
+    { 0x66989491u, 0x100000u, _SNRomCompat_LostVikings1, 3 },
+    { 0x94093298u, 0x100000u, _SNRomCompat_LostVikings1, 3 },
+    { 0x4EE705ABu, 0x100000u, _SNRomCompat_LostVikings1, 3 },
+    { 0x6E8A1081u, 0x100000u, _SNRomCompat_LostVikings1, 3 },
+    { 0x50FEF979u, 0x100000u, _SNRomCompat_LostVikings1, 3 },
+
+    /* The Addams Family: Europe, Japan. */
+    { 0x82497F19u, 0x100000u, _SNRomCompat_AddamsFamily, 3 },
+    { 0xCD80351Cu, 0x100000u, _SNRomCompat_AddamsFamily, 3 },
+
+    /* Lost Vikings 2 / Norse by Norsewest: Europe. */
+    { 0x3C49A285u, 0x100000u, _SNRomCompat_LostVikings2SkipIntro, 1 },
+#endif
+};
+#endif
+
 /* Pontua um header LoROM candidato em 'base' (deslocamento do $FFC0 da
    metade). Usado para descobrir QUAL metade de uma ROM ExLoROM contem o
    header/vetores reais, para normalizar a ordem (igual ao scoring do
@@ -446,29 +674,31 @@ void SnesRom::SetCartInfo(SNRomInfoT *pCartInfo)
 
 		m_eVideoType = pCountry ? pCountry->eVideoType : SNROM_VIDEO_NTSC;
 		m_uROMSize	  = 1 << (pCartInfo->RomSize - 7);
+		/* AURORA_ACCURACY_SRAM_SIZE_EXPONENT_V1
+		 * The SNES internal header stores ordinary Game Pak RAM size as an
+		 * exponent.  In bytes the conventional formula is 2^(code + 10);
+		 * m_uSRAMSize is expressed in kilobits, therefore 8 << code.
+		 * Codes through 8 fit Aurora's existing 256 KiB backing store
+		 * (code 8 = 256 KiB). Do not clamp larger declarations
+		 * into that buffer: treating them as absent is safer than aliasing or
+		 * writing past the allocation.  SuperFX may override this value later
+		 * from its extended header, as before. */
 		if (g_FakeSRAMSize)
-{
-    m_uSRAMSize = g_FakeSRAMSize;
-}
-else
-{
-    switch (pCartInfo->SRAMSize)
-    {
-    default:
-    case 0:
-        m_uSRAMSize = 0;
-        break;
-    case 1:
-        m_uSRAMSize = 16;
-        break;
-    case 2:
-        m_uSRAMSize = 32;
-        break;
-    case 3:
-        m_uSRAMSize = 64;
-        break;
-    }
-}
+		{
+			m_uSRAMSize = g_FakeSRAMSize;
+		}
+		else if (pCartInfo->SRAMSize == 0)
+		{
+			m_uSRAMSize = 0;
+		}
+		else if (pCartInfo->SRAMSize <= 8)
+		{
+			m_uSRAMSize = (Uint32)8 << pCartInfo->SRAMSize;
+		}
+		else
+		{
+			m_uSRAMSize = 0;
+		}
 		switch (pCartInfo->RomType)
 		{
 		case 0:
@@ -829,6 +1059,128 @@ Emu::Rom::LoadErrorE SnesRom::LoadRom(CDataIO *pFileIO, Uint8 *pBuffer, Uint32 n
 			pHiCartInfo = GetCartInfo(65472);
 		}
 	}
+
+/* AURORA_SONIC_BLAST_MAN_COLOR_V7
+ * Never leak the previous game's renderer workaround into the next load. */
+g_SnesCompatSonicBlastManColorMath = FALSE;
+
+/* AURORA_HK97_SPC_BOOT_DB_V9
+ * Detect the normalized/headerless ROM before any V6 in-memory patching.
+ * The flag is reset on every load so it can never leak to the next game. */
+g_SnesCompatHongKong97SPCBoot = FALSE;
+#if SNES_HK97_SPC_BOOT
+if (m_pRomData && m_uRomBytes == 0x80000u)
+{
+    const Uint32 uHK97CRC = _SNRomHK97CRC32(m_pRomData, m_uRomBytes);
+    g_SnesCompatHongKong97SPCBoot =
+        (uHK97CRC == 0x11A6E64Bu) ||
+        (uHK97CRC == 0xC6A95816u);
+}
+#endif
+
+/* AURORA_CRC_ZERO_INIT_DB_V8 + AURORA_TOP_GEAR_FASTROM_V1
+ * Compute the untouched normalized/headerless CRC once, before V6 can mutate
+ * compatibility bytes. The Top Gear timing flag is reset every load. */
+g_SnesCompatZeroInit = FALSE;
+g_SnesCompatTopGearFastRom = FALSE;
+#if SNES_CRC_ZERO_INIT || SNES_TOP_GEAR_FASTROM_HACK
+if (m_pRomData && m_uRomBytes)
+{
+    const Uint32 uCompatIdentityCRC = _SNRomZeroInitCRC32(m_pRomData, m_uRomBytes);
+#if SNES_CRC_ZERO_INIT
+    g_SnesCompatZeroInit = _SNRomNeedsZeroInit(uCompatIdentityCRC);
+#endif
+#if SNES_TOP_GEAR_FASTROM_HACK
+    if (m_uRomBytes == 0x80000u)
+    {
+        g_SnesCompatTopGearFastRom =
+            (uCompatIdentityCRC == 0xD34C49B7u) || /* Top Gear USA */
+            (uCompatIdentityCRC == 0xB0150052u) || /* Top Gear Europe */
+            (uCompatIdentityCRC == 0xE5A57B12u);   /* Top Racer Japan */
+    }
+#endif
+}
+#endif
+
+#if SNES_ROM_COMPAT_PATCHES
+	/* AURORA_CRC_COMPAT_DB_V6
+	 * Apply only after copier deinterleaving, so CRC32 and offsets refer to the
+	 * normalized/headerless ROM image.  CRC is the identity gate requested by
+	 * the compatibility policy; valid LoROM + exact size are cheap extra guards.
+	 * No expected-original-byte signature is required.
+	 */
+	if (m_uRomBytes == 0x100000u && _SNRomIsValidCartInfo(pLoCartInfo))
+	{
+		const Uint32 uCompatCRC = _SNRomCompatCRC32(m_pRomData, m_uRomBytes);
+
+#if SNES_SONIC_COLOR_WORKAROUND
+		/* Sonic Blast Man clean 1 MiB dumps: USA / Europe / Japan.
+		 * The renderer uses this only to suppress CGADSUB color math. */
+		g_SnesCompatSonicBlastManColorMath =
+			(uCompatCRC == 0x8886396Eu) ||
+			(uCompatCRC == 0x5441F25Bu) ||
+			(uCompatCRC == 0xBE523800u);
+#endif
+
+		const SNRomCompatEntryT *pCompat = NULL;
+
+		for (Uint32 i = 0;
+		     i < (Uint32)(sizeof(_SNRomCompatEntries) / sizeof(_SNRomCompatEntries[0]));
+		     ++i)
+		{
+			if (_SNRomCompatEntries[i].CRC32 == uCompatCRC &&
+			    _SNRomCompatEntries[i].RomBytes == m_uRomBytes)
+			{
+				pCompat = &_SNRomCompatEntries[i];
+				break;
+			}
+		}
+
+		if (pCompat)
+		{
+			Bool bBoundsOK = TRUE;
+			for (Uint32 i = 0; i < pCompat->nWrites; ++i)
+			{
+				if (pCompat->pWrites[i].Offset + 1u >= m_uRomBytes)
+				{
+					bBoundsOK = FALSE;
+					break;
+				}
+			}
+
+			if (bBoundsOK)
+			{
+				Bool bWritable = (m_pRomMem != NULL) ? TRUE : FALSE;
+				if (!bWritable)
+				{
+					Uint8 *pCompatCopy = (Uint8 *)malloc(m_uRomBytes);
+					if (pCompatCopy)
+					{
+						memcpy(pCompatCopy, m_pRomData, m_uRomBytes);
+						m_pRomMem = pCompatCopy;
+						m_pRomData = pCompatCopy;
+						bWritable = TRUE;
+					}
+				}
+
+				if (bWritable)
+				{
+					for (Uint32 i = 0; i < pCompat->nWrites; ++i)
+					{
+						const SNRomCompatWriteT *pWrite = &pCompat->pWrites[i];
+						m_pRomData[pWrite->Offset + 0] = pWrite->Data0;
+						m_pRomData[pWrite->Offset + 1] = pWrite->Data1;
+					}
+
+					/* Copying changes the base pointer. Rebuild header pointers before
+					 * mapper detection stores m_pCartInfo. */
+					pLoCartInfo = GetCartInfo(32704);
+					pHiCartInfo = GetCartInfo(65472);
+				}
+			}
+		}
+	}
+#endif
 
 	// get cart info for rom
 	pCartInfo = pLoCartInfo;

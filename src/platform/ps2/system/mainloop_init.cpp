@@ -291,10 +291,9 @@ Bool MainLoopInit()
 	ScrPrintf("%s",  pVersionInfo->CopyRight);
 #endif
 
-	/* Boot banner: original SNESticlePS2 title + iaddis copyright
-	   (replaces the #if 0 block above which depended on VersionGetInfo,
-	   itself wrapped in #if 0 inside version.cpp), followed by the
-	   ReyFxck fork credit. */
+	/* Boot banner: SNESticle Aurora identity, followed by explicit
+	   project lineage and thanks to SNESticle Revive maintainer ReyFxck
+	   and original SNESticle author Icer Addis. */
 	/* BUILD_DATE/BUILD_TIME vem do Makefile (TZ Brasilia, p/ nao ficar 3h
 	   adiantado como o __TIME__ em UTC).  APP_VERSION e' opt-in: so' e'
 	   definido se o build passar APP_VERSION=...; sem ele, o banner nao
@@ -306,18 +305,36 @@ Bool MainLoopInit()
 #define BUILD_TIME __TIME__
 #endif
 #ifdef APP_VERSION
-	ScrPrintf("SNESticle Revive v%s   %s  %s", APP_VERSION, BUILD_DATE, BUILD_TIME);
+	ScrPrintf("SNESticle Aurora v%s   %s  %s", APP_VERSION, BUILD_DATE, BUILD_TIME);
 #else
-	ScrPrintf("SNESticle Revive   %s  %s", BUILD_DATE, BUILD_TIME);
+	ScrPrintf("SNESticle Aurora   %s  %s", BUILD_DATE, BUILD_TIME);
 #endif
+	ScrPrintf("Aurora fork by itsveenee");
+	ScrPrintf("Based on SNESticle Revive by ReyFxck");
+	ScrPrintf("Thanks to ReyFxck for reviving SNESticle");
+	ScrPrintf("Original SNESticle by Icer Addis");
+	ScrPrintf("Thanks to Icer Addis for the original");
+	ScrPrintf("QuickNES core by Shay Green / libretro");
 	ScrPrintf("Copyright (c) 1997-2004 Icer Addis");
-	ScrPrintf("Forked By ReyFxck - Thomas R. (2026)");
 
 	ScrPrintf("BootPath: %s", MainGetBootPath());
 	ScrPrintf("BootDir: %s", MainGetBootDir());
 
 	// set boot dir
-	strcpy(_MainLoop_BootDir, MainGetBootDir());
+	/* AURORA_RUNTIME_SAFE_BOOTDIR_V1_4_2 */
+	{
+		const char *pBootDir = MainGetBootDir();
+		if (!pBootDir || strlen(pBootDir) >= sizeof(_MainLoop_BootDir))
+		{
+			_MainLoop_BootDir[0] = ' ';
+			ScrPrintf("[boot] BootDir too long; sidecar search disabled");
+		}
+		else
+		{
+			snprintf(_MainLoop_BootDir, sizeof(_MainLoop_BootDir),
+			         "%s", pBootDir);
+		}
+	}
     _MainLoopLoadModules(_MainLoop_IOPModulePaths);
 
     /* Video settings live on the memory card, which only comes up inside
@@ -414,10 +431,8 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 	_pSnes->Reset();
 
 	_pSnesRom = new SnesRom();
-	for (Uint32 iExt=0; iExt < _pSnesRom->GetNumExts(); iExt++)
-	{
-		PathExtAdd(MAINLOOP_ENTRYTYPE_SNESROM, _pSnesRom->GetExtName(iExt));
-	}
+	PathExtAdd(MAINLOOP_ENTRYTYPE_SNESROM, (char *)"sfc");
+	PathExtAdd(MAINLOOP_ENTRYTYPE_SNESROM, (char *)"smc");
 
 	PathExtAdd(MAINLOOP_ENTRYTYPE_SNESPALETTE, (char *)"snpal");
 
@@ -449,7 +464,17 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 		PathExtAdd(MAINLOOP_ENTRYTYPE_NESFDSBIOS, _pNesFDSBios->GetExtName(iExt));
 	}
 
-	s_pMovieClip = new Emu::MovieClip(_pSnes->GetStateSize(), 60 * 60 * 60);
+	/* SNESTICLE_MOVIE_MAX_SYSTEM_STATE
+	 * MovieClip::RecordBegin changes m_uStateSize to the ACTIVE system and
+	 * asserts it is <= the constructor maximum. Allocate for whichever
+	 * core has the larger frontend state envelope instead of assuming SNES. */
+	{
+		Uint32 uMovieStateBytes = (Uint32)_pSnes->GetStateSize();
+		Uint32 uNesStateBytes   = (Uint32)_pNes->GetStateSize();
+		if (uNesStateBytes > uMovieStateBytes)
+			uMovieStateBytes = uNesStateBytes;
+		s_pMovieClip = new Emu::MovieClip(uMovieStateBytes, 60 * 60 * 60);
+	}
 
 	// init menu
 	_MainLoop_pBrowserScreen = new CBrowserScreen(6000);
@@ -469,7 +494,7 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 
 	_MainLoop_pStateScreen = new CMenuScreen();
 	_MainLoop_pStateScreen->SetMsgFunc(_MainLoopStateMenuEvent);
-	_MainLoop_pStateScreen->SetTitle("Save States");
+	_MainLoop_pStateScreen->SetTitle("Save Management");
 	_MainLoop_pStateScreen->SetTop(20);
 	_MainLoop_pStateScreen->SetEntries(_MainLoopStateMenuEntries);
 	_MainLoopStateMenuRefresh();
@@ -481,6 +506,11 @@ TextureUpload(&_OutTex, _fbTexture[0]->GetLinePtr(0));
 	_MainLoop_pStateDeviceScreen->SetMsgFunc(_MainLoopStateDeviceMenuEvent);
 	_MainLoop_pStateDeviceScreen->SetTitle("Save State Location");
 	_MainLoop_pStateDeviceScreen->SetTop(20);
+
+	_MainLoop_pStateConfirmScreen = new CMenuScreen();
+	_MainLoop_pStateConfirmScreen->SetMsgFunc(_MainLoopStateConfirmMenuEvent);
+	_MainLoop_pStateConfirmScreen->SetTop(40);
+	_MainLoop_pStateConfirmScreen->SetHorizontal(TRUE);
 
 	_MainLoop_pMemCardFormatScreen = new CMenuScreen();
 	_MainLoop_pMemCardFormatScreen->SetMsgFunc(

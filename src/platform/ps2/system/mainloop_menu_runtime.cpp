@@ -58,7 +58,8 @@ static void _MenuSavePendingSRAM(void)
 
 	BgmIOBegin();
 	#if MAINLOOP_MEMCARD
-	if (MemCardGetStatus(0) == MEMCARD_STATUS_UNFORMATTED)
+	if (MainLoopSramNeedsMemoryCardPreflight() &&
+	    MemCardGetStatus(0) == MEMCARD_STATUS_UNFORMATTED)
 	{
 		BgmIOEnd();
 		_MainLoopMemCardFormatPromptOpen(
@@ -70,6 +71,21 @@ static void _MenuSavePendingSRAM(void)
 	#endif
 
 	bSaved = _MainLoopSaveSRAM(TRUE);
+
+	/* Second-stage check: AUTO may have seen mass0 as mounted, failed the
+	   actual USB write, and then discovered an unformatted MC fallback. */
+	#if MAINLOOP_MEMCARD
+	if (!bSaved &&
+	    MainLoopSramGetDevice() != MAINLOOP_SRAMDEVICE_USB &&
+	    MemCardGetStatus(0) == MEMCARD_STATUS_UNFORMATTED)
+	{
+		BgmIOEnd();
+		_MainLoopMemCardFormatPromptOpen(
+			0, MAINLOOP_MEMCARDFORMAT_SRAM_SAVE);
+		return;
+	}
+	#endif
+
 	BgmIOEnd();
 	MainLoopStatusPrintf(
 		bSaved ? 90 : 180,
@@ -101,7 +117,12 @@ void _MenuEnable(Bool bEnable)
 			_bMenu = TRUE;
 			BgmMenuEnter();
 			if (_MainLoop_bAudioReady)
+			{
+				/* AURORA_AUDIO_ASYNC_FIFO_MENU_CUT
+				 * Staged gameplay PCM must not leak into menu BGM/resume. */
+				Aud_AsyncDiscardPending();
 				Aud_Setvol(0);
+			}
 
 			/* Preserve a write performed in the <30-frame checksum window. */
 			_MainLoopForceCheckSRAM();
@@ -192,9 +213,9 @@ void _MenuDraw()
 
 #ifdef APP_VERSION
     static const char *_AppVersionStr =
-        "SNESticle Revive PS2 v" APP_VERSION;
+        "SNESticle Aurora v" APP_VERSION;
 #else
-    static const char *_AppVersionStr = "SNESticle Revive PS2 v1.0.4";
+    static const char *_AppVersionStr = "SNESticle Aurora v1.0.4";
 #endif
     FontPuts(256 - 16 - FontGetStrWidth(_AppVersionStr),
              vy, _AppVersionStr);

@@ -29,8 +29,11 @@ static SnesMemMapT	_SnesMemMap_LoRom[]=
 	{0x40, 0x6F, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM, 0x200000},
 	{0xC0, 0xFF, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM, 0x200000},
 
-	// map sram areas
-	{0x70, 0x77, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	/* AURORA_MEGA_V2_SRAM_MAP
+	 * Standard LoROM SRAM windows. $f0-$ff is a real high-bank mirror
+	 * used by commercial software; $70-$7d is the low-bank window. */
+	{0x70, 0x7D, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0xF0, 0xFF, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
 
 	// map ram
 	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
@@ -47,6 +50,18 @@ static SnesMemMapT	_SnesMemMap_LoRom[]=
 	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
 };
 
+/* AURORA_MEGA_V31_LOROM_SRAM_DECODE
+ * Small standard LoROM boards (ROM <= 2 MiB, SRAM <= 32 KiB) decode SRAM
+ * across the complete $0000-$ffff range of banks $70-$7d/$f0-$ff. Larger
+ * LoROMs leave the upper half to ROM. Keep this as a supplemental map so
+ * the common mega-v2 low-half windows remain correct for every LoROM. */
+static SnesMemMapT _SnesMemMap_LoRom_SRAMFullHigh[]=
+{
+	{0x70, 0x7D, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0xF0, 0xFF, 0x8000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0, 0, 0, 0, SNESMEM_TYPE_NONE}
+};
+
 static SnesMemMapT	_SnesMemMap_HiRom[]=
 {
 	// map slow rom
@@ -57,16 +72,9 @@ static SnesMemMapT	_SnesMemMap_HiRom[]=
 	{0x80, 0xBF, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
 	{0xC0, 0xFF, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_ROM},
 
-	// map sram areas
-	{0x70, 0x77, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x00, 0x0F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x10, 0x1F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x20, 0x2F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x30, 0x3F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x80, 0x8F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0x90, 0x9F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0xA0, 0xAF, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
-	{0xB0, 0xBF, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	// standard HiROM SRAM windows
+	{0x20, 0x3F, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0xA0, 0xBF, 0x6000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
 
 	// map ram
 	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
@@ -349,7 +357,11 @@ void SnesSystem::MapMem(SnesMemMapT *pMemMap)
 					if (nBytes & (SNCPU_BANK_SIZE - 1))
 					{
 						// size of sram wont map evenly to our bank size, so we must use a traphandler for reads/writes
-						SNCPUSetTrap(pCpu, uStartAddr, uAlignedBytes, ReadSRAM, WriteSRAM);
+						/* AURORA_MEGA_V31_SRAM_SMALL_MIRROR_TRAP
+						 * Small SRAM is mirrored throughout the complete cartridge
+						 * window; ReadSRAM/WriteSRAM perform the physical wrap. */
+						SNCPUSetTrap(pCpu, uStartAddr, uEndAddr - uStartAddr,
+						             ReadSRAM, WriteSRAM);
 					}
 					else
 					{
@@ -429,7 +441,9 @@ void SnesSystem::DumpMemMap()
    tem que vencer a ROM que a regiao $40-$7F mapeia ali). */
 static SnesMemMapT _SnesMemMap_ExLoRom_Sys[]=
 {
-	{0x70, 0x77, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	/* v3.1: Jumbo/ExLoROM uses the standard LoROM SRAM mirrors. */
+	{0x70, 0x7D, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
+	{0xF0, 0xFF, 0x0000, 0x7FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_SRAM},
 	{0x7E, 0x7F, 0x0000, 0xFFFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_RAM},
 	{0x00, 0x3F, 0x0000, 0x1FFF, SNCPU_CYCLE_SLOW, SNESMEM_TYPE_LORAM},
 	{0x00, 0x3F, 0x2000, 0x3FFF, SNCPU_CYCLE_FAST, SNESMEM_TYPE_PPU0},
@@ -508,6 +522,15 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 		case SNROM_MAPPING_LOROM:
 			MapMem(_SnesMemMap_LoRom);
 
+			/* v3.1: generic small-LoROM full-bank SRAM decode. The first
+			 * MapMem call above has already resolved/capped m_uSramSize. */
+			if (!(uFlags & SNROM_FLAG_SUPERFX) &&
+			    m_pRom->GetBytes() <= 0x200000 &&
+			    m_uSramSize > 0 && m_uSramSize <= 0x8000)
+			{
+				MapMem(_SnesMemMap_LoRom_SRAMFullHigh);
+			}
+
 #if SNES_DSP1
 			if (uFlags & SNROM_FLAG_DSP1) { MapMem(_SnesMemMap_LoRom_DSP1); m_pDsp = &m_DSP1; }
 			if (uFlags & SNROM_FLAG_DSP2) { MapMem(_SnesMemMap_LoRom_DSP1); m_pDsp = &m_DSP2; }
@@ -570,7 +593,10 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 
 				// A MMIO do GSU ($3000-$34FF) compartilha a pagina do PPU e
 				// continua roteada por Read2000/Write2000.
-				m_GSU.SetVersion(bMarioChip1 ? 0x01 : 0x04);
+				/* AURORA_V81_SUPERFX_REVISION_BIND
+				 * Keep the already board-specific S-CPU maps intact; only pass
+				 * MC1/GSU1/GSU2 identity into the core for clock capabilities. */
+				m_GSU.SetRevision((Uint8)nBoard);
 				m_GSU.SetMemory(m_pRom->GetData(), m_pRom->GetBytes(),
 				                m_SRam, m_uSramSize);
 			}
@@ -605,6 +631,14 @@ void SnesSystem::MapMem(SNRomMappingE eRomMapping, Uint32 uFlags)
 			MapMemExLoRom();
 			break;
 	}
+
+	/* AURORA_TOP_GEAR_FASTROM_V1
+	 * The published FastROM patch for Top Gear gains speed by making ROM
+	 * accesses fast. Aurora does the equivalent at the mapper timing layer
+	 * for exact U/E/J CRCs, so no ROM bank-rewrite or ROM-byte mutation is
+	 * needed. SNCPUSetRomSpeed changes direct ROM descriptors only. */
+	if (g_SnesCompatTopGearFastRom)
+		SNCPUSetRomSpeed(&m_Cpu, 0x000000, 0x1000000, SNCPU_CYCLE_FAST);
 
 	/* Indexed/16-bit accesses can transiently carry past $FFFFFF.  Publish
 	   bank $00 into the overflow page after every cartridge/system override
@@ -669,6 +703,13 @@ void SnesSystem::SetFastRom()
 
 void SnesSystem::SetSlowRom()
 {
+	/* AURORA_TOP_GEAR_FASTROM_V1: keep exact-CRC Top Gear/Top Racer ROM
+	 * fast across hard/soft reset and MEMSEL=0 writes. */
+	if (g_SnesCompatTopGearFastRom)
+	{
+		SNCPUSetRomSpeed(&m_Cpu, 0x000000, 0x1000000, SNCPU_CYCLE_FAST);
+		return;
+	}
 	SNCPUSetRomSpeed(&m_Cpu, 0x800000, 0x800000, SNCPU_CYCLE_SLOW);
 }
 

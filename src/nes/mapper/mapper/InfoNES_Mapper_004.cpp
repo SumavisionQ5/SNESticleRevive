@@ -18,6 +18,7 @@ BYTE Map4_IRQ_Cnt;
 BYTE Map4_IRQ_Latch;
 BYTE Map4_IRQ_Request;
 BYTE Map4_IRQ_Present;
+BYTE Map4_IRQ_Present_Vbl;
 
 /*-------------------------------------------------------------------*/
 /*  Initialize Mapper 4                                              */
@@ -86,6 +87,7 @@ void Map4_Init()
   Map4_IRQ_Latch = 0;
   Map4_IRQ_Request = 0;
   Map4_IRQ_Present = 0;
+  Map4_IRQ_Present_Vbl = 0;
 
   /* Set up wiring of the interrupt pin */
   K6502_Set_Int_Wiring( 1, 1 ); 
@@ -201,13 +203,15 @@ void Map4_Write( WORD wAddr, BYTE byData )
 
     case 0xc001:
       Map4_Regs[ 5 ] = byData;
-      /* C001 clears the IRQ counter and requests a reload from C000
-         on the next MMC3 IRQ clock. The value written to C001 is
-         irrelevant. This implementation clocks the mapper once per
-         HSync, so the next HSync is the closest equivalent available.
-         Do not special-case VBlank: the hardware has no such mode. */
-      Map4_IRQ_Cnt = 0x80;
-      Map4_IRQ_Present = 0xff;
+      if ( PPU_Scanline < 240 )
+      {
+          Map4_IRQ_Cnt |= 0x80;
+          Map4_IRQ_Present = 0xff;
+      } else {
+          Map4_IRQ_Cnt |= 0x80;
+          Map4_IRQ_Present_Vbl = 0xff;
+          Map4_IRQ_Present = 0;
+      }
       break;
 
     case 0xe000:
@@ -219,6 +223,7 @@ void Map4_Write( WORD wAddr, BYTE byData )
     case 0xe001:
       Map4_Regs[ 7 ] = byData;
       Map4_IRQ_Enable = 1;
+			Map4_IRQ_Request = 0;
       break;
   }
 }
@@ -235,6 +240,10 @@ void Map4_HSync()
   if ( ( /* 0 <= PPU_Scanline && */ PPU_Scanline <= 239 ) && 
        ( PPU_R1 & R1_SHOW_SCR || PPU_R1 & R1_SHOW_SP ) )
   {
+		if( Map4_IRQ_Present_Vbl ) {
+			Map4_IRQ_Cnt = Map4_IRQ_Latch;
+			Map4_IRQ_Present_Vbl = 0;
+		}
 		if( Map4_IRQ_Present ) {
 			Map4_IRQ_Cnt = Map4_IRQ_Latch;
 			Map4_IRQ_Present = 0;

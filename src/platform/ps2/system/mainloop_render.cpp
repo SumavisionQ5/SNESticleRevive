@@ -35,6 +35,7 @@ extern "C" {
 #include "gpfifo.h"
 #include "gpprim.h"
 #include "gskit_backend.h"
+#include "audio.h"
 };
 
 extern "C" {
@@ -57,6 +58,25 @@ void MainLoopRender()
 	static Uint32 _iFrame=0;
         static int whichdrawbuf = 0;
 
+        /*
+         * NES/SNES 240p: keep the framebuffer strictly 256x240 (1 source
+         * pixel = 1 framebuffer pixel) and correct horizontal size at
+         * the PCRTC level instead. This avoids uneven pixel widths
+         * caused by scaling 256 pixels into a smaller PolyRect.
+         */
+        static int s_native240pPar = -1;
+        int native240pPar =
+            (g_GskVideoMode == GSK_VIDMODE_240P &&
+             (_pSystem == _pNes || _pSystem == _pSnes) &&
+             !_bMenu) ? 1 : 0;
+
+        if (native240pPar != s_native240pPar)
+        {
+            GSK_SetNative240pPar(native240pPar);
+            s_native240pPar = native240pPar;
+        }
+
+
 
     /* Re-anchor FRAME_1 to gsKit's current draw buffer before any
        primitive runs this frame. The legacy GS_SetDrawFB used to do
@@ -65,6 +85,12 @@ void MainLoopRender()
        to a stale (or, after the SNES blender ran, completely wrong)
        buffer and the visible framebuffer flickered black on every
        other frame. See gskit_backend.h for the longer rationale. */
+    /* AURORA_GS_PARTIAL_GAMEPLAY_CLEAR_V1
+     * Only enable the reduced clear when this frame is guaranteed to draw the
+     * normal game output texture. Menu, boot and black-screen frames retain
+     * the complete physical clear. */
+    GSK_SetGameplayFastClear(
+        (!_bMenu && _pSystem && !_MainLoop_BlackScreen) ? TRUE : FALSE);
     GSK_ResetFrame();
 
     // render frame
@@ -138,11 +164,15 @@ void MainLoopRender()
  * preserve a 1:1 pixel mapping. Only reposition the image
  * to compensate for CRT overscan.
  */
-PolyRect(0.0f, 5.0f, 256.0f, 240.0f);
+PolyRect(0.0f, 2.0f, 256.0f, 240.0f);
+        }
+        else if (_pSystem == _pSnes)
+        {
+PolyRect(0.0f, 8.0f, 256.0f, 240.0f);
         }
         else
         {
-PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
+PolyRect(0.0f, 4.0f, 256.0f, 240.0f);
         }
 
         PolyBlend(TRUE);
@@ -289,6 +319,13 @@ PolyRect(0.0f, 7.0f, 256.0f, 240.0f);
     GSK_SyncFlip();
     if ( (_iFrame&15)==0)   _uVblankCycle = ProfCtrGetCycle() - _uVblankCycle;
     PROF_LEAVE("WaitVBlank");
+
+    /* AURORA_AUDIO_FAILSOFT_POSTVBLANK_V1
+     * The frame is already presented. Keep the normal gameplay audio drain
+     * here so synchronous audsrv RPC latency is moved out of the pre-render
+     * deadline. Aud_BufferedAsyncStart uses only wait=0 drains. */
+    if (!_bMenu && _pSystem && !_MainLoop_BlackScreen)
+        Aud_BufferedAsyncStart();
 
     /* whichdrawbuf is now decorative - gsKit owns the active
        framebuffer index via gsGlobal->ActiveBuffer. Keep it

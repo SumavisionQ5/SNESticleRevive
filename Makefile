@@ -51,6 +51,15 @@ TARGET_STRIPPED := $(OBJ_DIR)/SNESticle.stripped.elf
 TARGET_PACKED := $(OBJ_DIR)/SNESticle.packed.elf
 BIN2C   ?= $(PS2SDK)/bin/bin2c
 
+# QUICKNES_SNESTICLE_BEGIN
+QUICKNES_DIR ?= $(CURDIR)/src/third_party/quicknes
+QUICKNES_LIB ?= $(QUICKNES_DIR)/quicknes_libretro_ps2.a
+QUICKNES_INC := $(QUICKNES_DIR)/libretro/libretro-common/include
+QUICKNES_NATIVE_INC := $(QUICKNES_DIR)/nes_emu
+# QUICKNES_SNESTICLE_END
+
+
+
 EE_CC ?= $(shell if command -v ee-gcc >/dev/null 2>&1; then echo ee-gcc; elif command -v mips64r5900el-ps2-elf-gcc >/dev/null 2>&1; then echo mips64r5900el-ps2-elf-gcc; elif [ -x "$(PS2DEV)/ee/bin/ee-gcc" ]; then echo "$(PS2DEV)/ee/bin/ee-gcc"; elif [ -x "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-gcc" ]; then echo "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-gcc"; fi)
 EE_CXX ?= $(shell if command -v ee-g++ >/dev/null 2>&1; then echo ee-g++; elif command -v mips64r5900el-ps2-elf-g++ >/dev/null 2>&1; then echo mips64r5900el-ps2-elf-g++; elif [ -x "$(PS2DEV)/ee/bin/ee-g++" ]; then echo "$(PS2DEV)/ee/bin/ee-g++"; elif [ -x "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-g++" ]; then echo "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-g++"; fi)
 EE_STRIP ?= $(shell if command -v ee-strip >/dev/null 2>&1; then echo ee-strip; elif command -v mips64r5900el-ps2-elf-strip >/dev/null 2>&1; then echo mips64r5900el-ps2-elf-strip; elif [ -x "$(PS2DEV)/ee/bin/ee-strip" ]; then echo "$(PS2DEV)/ee/bin/ee-strip"; elif [ -x "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-strip" ]; then echo "$(PS2DEV)/ee/bin/mips64r5900el-ps2-elf-strip"; fi)
@@ -82,6 +91,36 @@ SNES_OBJ_CACHE ?= 1
 # continua disponivel somente para comparacao A/B.
 SNES_BG_CACHE ?= 0
 
+# Cache H-flip 4bpp para reduzir trabalho repetido em sprites
+SNES_CHR_HFLIP_CACHE ?= 0
+
+# AURORA_HVIRQ_RESCHEDULE_V4
+# Re-arm H/V timer events when $4200/$4207-$420A change mid-scanline.
+# Set to 0 for an exact legacy scheduler A/B build.
+SNES_HVIRQ_RESCHEDULE ?= 1
+
+# AURORA_ROM_COMPAT_DB_V6
+# CRC-gated in-memory ROM workarounds. No file on disk is modified.
+# REGIONAL=0 keeps only payloads documented directly for the source region.
+SNES_ROM_COMPAT_PATCHES ?= 1
+SNES_ROM_COMPAT_REGIONAL ?= 1
+
+# AURORA_SONIC_COLOR_V7
+# CRC-gated Sonic Blast Man color-math workaround; set 0 for A/B testing.
+SNES_SONIC_COLOR_WORKAROUND ?= 1
+
+# AURORA_CRC_ZERO_INIT_V8
+# Exact-CRC cold-boot compatibility. Selected SNES titles reproduce the
+# ReyFxck/SNESticleRevive cold boot: WRAM=0x00 and SRAM backing=0x00.
+# Existing .srm files are still loaded later and overwrite this initial state.
+# Set to 0 for an A/B build using Aurora's random WRAM + 0xFF fresh SRAM.
+SNES_CRC_ZERO_INIT ?= 1
+
+# AURORA_HK97_SPC_BOOT_V9
+# Hong Kong '97 only: let the SPC700 IPL naturally reach its AA/BB boot
+# handshake before the S-CPU starts. Exact CRC32 gate, disabled with =0.
+SNES_HK97_SPC_BOOT ?= 1
+
 # Conservative flags to bridge the GCC 3.2 (2003) -> GCC 15.1 (2025)
 # gap in default optimization behavior. The original iaddis source was
 # written assuming the older compiler's much more conservative defaults,
@@ -107,17 +146,51 @@ CONSERVATIVE_FLAGS := \
 	-fwrapv \
 	-fsigned-char
 
-CFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) \
+# AURORA_V7_SAFE_BUILD_FLAGS
+# -pipe changes only compiler temporary-file plumbing; -fomit-frame-pointer
+# is semantics-preserving here and frees one register on the EE hot paths.
+# Deliberately no -O3, fast-math, LTO or renewed auto-vectorization.
+CFLAGS := -G0 -O2 -pipe -fomit-frame-pointer -Wall $(CONSERVATIVE_FLAGS) \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
-	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE)
+	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
+	-DSNPPU_CHR_CACHE_HFLIP=$(SNES_CHR_HFLIP_CACHE) \
+	-DSNES_HVIRQ_RESCHEDULE=$(SNES_HVIRQ_RESCHEDULE) \
+	-DSNES_ROM_COMPAT_PATCHES=$(SNES_ROM_COMPAT_PATCHES) \
+	-DSNES_ROM_COMPAT_REGIONAL=$(SNES_ROM_COMPAT_REGIONAL) \
+	-DSNES_SONIC_COLOR_WORKAROUND=$(SNES_SONIC_COLOR_WORKAROUND) \
+	-DSNES_CRC_ZERO_INIT=$(SNES_CRC_ZERO_INIT) \
+	-DSNES_HK97_SPC_BOOT=$(SNES_HK97_SPC_BOOT)
 
-CXXFLAGS := -G0 -O2 -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fno-exceptions -fno-rtti -fpermissive \
+CXXFLAGS := -G0 -O2 -pipe -fomit-frame-pointer -Wall $(CONSERVATIVE_FLAGS) -Wno-narrowing -Wno-overflow -fno-exceptions -fno-rtti -fpermissive \
 	-D_EE -DPS2 -DLSB_FIRST -DALIGN_DWORD -DCODE_PLATFORM=3 \
 	-DSNDBG_LOG=$(SNES_DIAG_ENABLED) -DSNDBG_DEEP=$(SNES_DIAG_DEEP) \
 	-DSNPPU_OBJ_CACHE=$(SNES_OBJ_CACHE) \
-	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE)
+	-DSNPPU_BG_CACHE=$(SNES_BG_CACHE) \
+	-DSNPPU_CHR_CACHE_HFLIP=$(SNES_CHR_HFLIP_CACHE) \
+	-DSNES_HVIRQ_RESCHEDULE=$(SNES_HVIRQ_RESCHEDULE) \
+	-DSNES_ROM_COMPAT_PATCHES=$(SNES_ROM_COMPAT_PATCHES) \
+	-DSNES_ROM_COMPAT_REGIONAL=$(SNES_ROM_COMPAT_REGIONAL) \
+	-DSNES_SONIC_COLOR_WORKAROUND=$(SNES_SONIC_COLOR_WORKAROUND) \
+	-DSNES_CRC_ZERO_INIT=$(SNES_CRC_ZERO_INIT) \
+	-DSNES_HK97_SPC_BOOT=$(SNES_HK97_SPC_BOOT)
+
+# AURORA_MEGA_V4_SAFE_HOT_COMPILE
+# Keep the project's global -O2 + CONSERVATIVE_FLAGS contract.  Only ask GCC
+# to inline more aggressively inside pure computational translation units;
+# do not enable -O3's loop transforms globally and do not touch GIF/GS/DMA I/O.
+AURORA_SAFE_HOT_CXXFLAGS := -finline-functions -finline-small-functions -findirect-inlining
+AURORA_SAFE_HOT_OBJS = \
+	$(OBJ_DIR)/snes/ppu/snppurender8.o \
+	$(OBJ_DIR)/snes/ppu/snppubg.o \
+	$(OBJ_DIR)/snes/ppu/snppuobj.o \
+	$(OBJ_DIR)/snes/core/sngsu.o \
+	$(OBJ_DIR)/snes/apu/snspcmix.o \
+	$(OBJ_DIR)/nes/quicknes/quicknes_bridge.o
+$(AURORA_SAFE_HOT_OBJS): CXXFLAGS += $(AURORA_SAFE_HOT_CXXFLAGS)
+# Makefile changes to the target-specific flags must invalidate these objects.
+$(AURORA_SAFE_HOT_OBJS): Makefile
 
 # The official libxmp-lite embedded/core configuration keeps the MOD/XM effect
 # and loop engines while omitting desktop-only depackers and format extras,
@@ -130,7 +203,7 @@ CXXFLAGS += -DLIBXMP_CORE_PLAYER
 # sem numero ou APP_VERSION=x.y.z para testar uma versao futura.
 # __DATE__/__TIME__ pegariam UTC (3h adiantado no Brasil); por isso a
 # data/hora vem do Makefile com TZ fixo de Brasilia.
-APP_VERSION ?= 1.0.4
+APP_VERSION ?= 1.0.0
 ifeq ($(strip $(APP_VERSION)),)
 VER_SUFFIX      :=
 APP_VERSION_DEF :=
@@ -138,7 +211,7 @@ else
 VER_SUFFIX      := _v$(APP_VERSION)
 APP_VERSION_DEF := -DAPP_VERSION=\"$(APP_VERSION)\"
 endif
-ELF_OUT_NAME := SNESticle_Revive$(VER_SUFFIX)
+ELF_OUT_NAME := SNESticle_Aurora$(VER_SUFFIX)
 BUILD_DATE   := $(shell TZ='America/Sao_Paulo' date '+%Y-%m-%d')
 BUILD_TIME   := $(shell TZ='America/Sao_Paulo' date '+%H:%M:%S')
 VERSION_DEFS := $(APP_VERSION_DEF) -DBUILD_DATE=\"$(BUILD_DATE)\" -DBUILD_TIME=\"$(BUILD_TIME)\"
@@ -284,7 +357,9 @@ INCS := \
 	-I$(PS2SDK)/common/include \
 	-I$(PS2SDK)/ee/include \
 	-I$(PS2SDK)/ports/include \
-	-I$(GSKIT)/include
+	-I$(GSKIT)/include \
+	-I$(QUICKNES_INC) \
+	-I$(QUICKNES_NATIVE_INC)
 
 LIBDIRS := \
 	-L$(PS2SDK)/ee/lib \
@@ -313,6 +388,7 @@ LIBS := \
 	-lpoweroff -lfileXio -lcdvd \
 	-lmc -lpad -lnetman -lps2ip \
 	-laudsrv \
+	-lelf-loader \
 	-lpatches \
 	-lcglue \
 	-ldebug -lkernel -lc -lm -lstdc++ -lgcc
@@ -468,22 +544,20 @@ SRCS := \
 	src/platform/ps2/system/mainloop_bgm.cpp \
 	src/platform/ps2/system/global_alloc.cpp \
 	src/platform/ps2/system/embedded_irx.cpp \
-	src/third_party/nes_snd_emu/Blip_Buffer.cpp \
-	src/third_party/nes_snd_emu/Nes_Apu.cpp \
-	src/third_party/nes_snd_emu/Nes_Oscs.cpp \
-	src/nes/core/InfoNES.cpp \
-	src/nes/cpu/K6502.cpp \
-	src/nes/apu/InfoNES_pAPU.cpp \
-	src/nes/mapper/InfoNES_Mapper.cpp \
-	src/nes/system/InfoNES_System_PS2.cpp \
 	src/nes/system/nesrom.cpp \
-	src/nes/system/nessystem.cpp
+	src/nes/quicknes/quicknes_bridge.cpp \
+	src/nes/quicknes/nessystem_quicknes.cpp
 
 OBJS := \
 	$(patsubst src/%.c,$(OBJ_DIR)/%.o,$(filter %.c,$(SRCS))) \
 	$(patsubst src/%.cpp,$(OBJ_DIR)/%.o,$(filter %.cpp,$(SRCS))) \
 	$(patsubst src/%.s,$(OBJ_DIR)/%.o,$(filter %.s,$(SRCS))) \
 	$(patsubst src/%.S,$(OBJ_DIR)/%.o,$(filter %.S,$(SRCS)))
+
+# AURORA_V7_MAKEFILE_REBUILDS_OBJECTS
+# Compiler flags live in this Makefile.  Make every main object depend on it
+# so changing flags causes a rebuild even when the user simply runs `make -j8`.
+$(OBJS): Makefile
 
 # Rastreamento de dependencia de headers.  -MMD faz o compilador gerar um
 # .d por objeto listando os headers que ele inclui; -MP adiciona alvos
@@ -542,7 +616,7 @@ SDK_EXTRA_IRX := ioptrap.irx poweroff.irx
 # The legacy iaddis CDVD.IRX is also no longer needed. The in-tree
 # cdfs_stream.irx registers cdfs: and streams directories instead of using
 # PS2SDK cdfs.irx's fixed 256-entry table.
-EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip smbman cdfs_stream usbd bdm bdmfs_fatfs usbmass_bd ps2atad ps2hdd mmceman mx4sio_bd
+EMBED_IRX_NAMES := audsrv freesd sio2man mcman mcserv padman mtapman ps2dev9 netman smap ps2ip smbman cdfs_stream usbd ps2mouse bdm bdmfs_fatfs usbmass_bd ps2atad ps2hdd mmceman mx4sio_bd
 
 # Pin the complete SIO2 storage/input group to one verified PS2SDK revision.
 # This prevents a future SDK update from mixing an incompatible sio2man with
@@ -585,6 +659,8 @@ PS2IP_IRX_PATH   ?= $(PS2SDK)/iop/irx/ps2ip.irx
 # reais.  usbd_mini e' o FreeUsbd compativel usado pelo OPL para BDM.  Os
 # caminhos continuam substituiveis na linha de comando para testes de driver.
 USBD_IRX_PATH        ?= $(CURDIR)/irx/usbd_mini.irx
+AURORA_PS2MOUSE_DIR  ?= $(CURDIR)/src/platform/ps2/iop/aurora_ps2mouse
+PS2MOUSE_IRX_PATH    ?= $(AURORA_PS2MOUSE_DIR)/aurora_ps2mouse.irx
 BDM_IRX_PATH         ?= $(CURDIR)/irx/bdm.irx
 BDMFS_FATFS_IRX_PATH ?= $(CURDIR)/irx/bdmfs_fatfs.irx
 USBMASS_BD_IRX_PATH  ?= $(CURDIR)/irx/usbmass_bd.irx
@@ -613,6 +689,7 @@ check-env: ensure-ps2dev
 	@test -f "$(CDFS_STREAM_IRX_PATH)" || (echo "ERROR: required streaming CDFS IRX not found: $(CDFS_STREAM_IRX_PATH)"; exit 1)
 	@test -f "$(SMBMAN_IRX_PATH)" || (echo "ERROR: required SMB filesystem IRX not found: $(SMBMAN_IRX_PATH)"; exit 1)
 	@test -f "$(USBD_IRX_PATH)" || (echo "ERROR: required FreeUsbd mini IRX not found: $(USBD_IRX_PATH)"; exit 1)
+	@test -f "$(PS2MOUSE_IRX_PATH)" || (echo "ERROR: required PS2 USB mouse IRX not found: $(PS2MOUSE_IRX_PATH)"; exit 1)
 	@test -f "$(BDM_IRX_PATH)" || (echo "ERROR: required BDM IRX not found: $(BDM_IRX_PATH)"; exit 1)
 	@test -f "$(BDMFS_FATFS_IRX_PATH)" || (echo "ERROR: required FAT/exFAT IRX not found: $(BDMFS_FATFS_IRX_PATH)"; exit 1)
 	@test -f "$(USBMASS_BD_IRX_PATH)" || (echo "ERROR: required USB mass IRX not found: $(USBMASS_BD_IRX_PATH)"; exit 1)
@@ -631,7 +708,7 @@ FORCE_COMPILE_MODE:
 
 $(BUILD_CONFIG_FILE): FORCE_COMPILE_MODE | $(OBJ_DIR)
 	@mkdir -p "$(BUILD_META_DIR)"; \
-	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) PROFILE=$(PROFILE) DSP4_CAPTURE=$(DSP4_CAPTURE) DSP4_STUB=$(DSP4_STUB)'; \
+	mode='SNES_DIAGNOSTICS=$(SNES_DIAGNOSTICS) SNES_OBJ_CACHE=$(SNES_OBJ_CACHE) SNES_BG_CACHE=$(SNES_BG_CACHE) SNES_CHR_HFLIP_CACHE=$(SNES_CHR_HFLIP_CACHE) PROFILE=$(PROFILE) DSP4_CAPTURE=$(DSP4_CAPTURE) DSP4_STUB=$(DSP4_STUB)'; \
 	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$mode" ]; then \
 		printf '%s\n' "$$mode" > "$@"; \
 	fi
@@ -674,6 +751,28 @@ $(EMBED_DIR)/cdfs_stream_irx.h: $(CDFS_STREAM_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,cdfs_stream_irx)
 $(EMBED_DIR)/usbd_irx.h: $(USBD_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,usbd_irx)
+# AURORA_COMPOSITE_MOUSE_V1
+AURORA_PS2MOUSE_SOURCES := \
+	$(AURORA_PS2MOUSE_DIR)/Makefile \
+	$(AURORA_PS2MOUSE_DIR)/ps2mouse.c \
+	$(AURORA_PS2MOUSE_DIR)/ps2mouse.h \
+	$(AURORA_PS2MOUSE_DIR)/imports.lst \
+	$(AURORA_PS2MOUSE_DIR)/irx_imports.h
+
+$(PS2MOUSE_IRX_PATH): $(AURORA_PS2MOUSE_SOURCES)
+	PATH="$(PS2DEV)/iop/bin:$(PS2DEV)/bin:$(PS2SDK)/bin:$$PATH" $(MAKE) -C $(AURORA_PS2MOUSE_DIR) PS2SDK="$(PS2SDK)" all
+
+# Build the local mouse IRX before the existing check-env recipe tests it.
+check-env: $(PS2MOUSE_IRX_PATH)
+
+.PHONY: aurora-ps2mouse-clean
+aurora-ps2mouse-clean:
+	$(MAKE) -C $(AURORA_PS2MOUSE_DIR) PS2SDK="$(PS2SDK)" clean
+
+clean: aurora-ps2mouse-clean
+
+$(EMBED_DIR)/ps2mouse_irx.h: $(PS2MOUSE_IRX_PATH) | $(EMBED_DIR)
+	$(call RUN_BIN2C,$<,$@,ps2mouse_irx)
 $(EMBED_DIR)/bdm_irx.h: $(BDM_IRX_PATH) | $(EMBED_DIR)
 	$(call RUN_BIN2C,$<,$@,bdm_irx)
 $(EMBED_DIR)/bdmfs_fatfs_irx.h: $(BDMFS_FATFS_IRX_PATH) | $(EMBED_DIR)
@@ -787,8 +886,22 @@ $(OBJ_DIR)/%.o: src/%.s | $(OBJ_DIR)
 	$(call RUN_COMPILE,AS,$<,$(EE_CC) $(CFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")
 $(OBJ_DIR)/%.o: src/%.S | $(OBJ_DIR)
 	$(call RUN_COMPILE,AS,$<,$(EE_CC) $(CFLAGS) $(DEPFLAGS) $(INCS) -c "$<" -o "$@")
-$(TARGET): $(OBJS) | $(OBJ_DIR)
-	$(call RUN_LINK,$@,$(EE_CXX) -o "$@" $(OBJS) $(LIBDIRS) $(LIBS))
+# SNESTICLE_QUICKNES_ALWAYS_SUBMAKE
+.PHONY: FORCE_QUICKNES
+FORCE_QUICKNES:
+
+$(QUICKNES_LIB): FORCE_QUICKNES
+	@echo "[ QuickNES ] Building PS2 static core"
+	@PATH="$(PS2DEV)/ee/bin:$(PS2DEV)/bin:$(PS2SDK)/bin:$$PATH" \
+	$(MAKE) -C "$(QUICKNES_DIR)" \
+		platform=ps2 \
+		PS2DEV="$(PS2DEV)" \
+		PS2SDK="$(PS2SDK)" \
+		all
+
+
+$(TARGET): $(OBJS) $(QUICKNES_LIB) | $(OBJ_DIR)
+	$(call RUN_LINK,$@,$(EE_CXX) -o "$@" $(OBJS) "$(QUICKNES_LIB)" $(LIBDIRS) $(LIBS))
 
 $(TARGET_STRIPPED): $(TARGET)
 	@cp -f "$(TARGET)" "$@"
@@ -901,9 +1014,9 @@ packed: $(TARGET_PACKED)
 #   make elf out=<pasta>        # copies SNESticle(.packed).elf -> <pasta>/
 #
 # When PACK=1 (default) both the stripped/unpacked and the packed ELF are
-# copied; the packed one (`SNESticle.packed.elf`, ~490 KB) is the one
+# copied; the packed one (`SNESticle_Aurora.packed.elf`, ~490 KB) is the one
 # you want to ship. The linked ELF with debug symbols remains available as
-# build/SNESticle.elf, but is never copied as a standalone release file.
+# build/SNESticle_Aurora.elf, but is never copied as a standalone release file.
 elf: $(TARGET_STRIPPED) $(if $(filter 1,$(PACK)),$(TARGET_PACKED))
 	@if [ -n "$(strip $(out))" ]; then \
 		mkdir -p "$(out)"; \
@@ -927,7 +1040,7 @@ package: check-env $(TARGET_STRIPPED) package-irx
 package-irx: $(TARGET_STRIPPED) | $(PKG_DIR)
 	@set -e; \
 	echo "PKG $(PKG_DIR)"; \
-	cp "$(TARGET_STRIPPED)" "$(PKG_DIR)/SNESticle.elf"; \
+	cp "$(TARGET_STRIPPED)" "$(PKG_DIR)/SNESticle_Aurora.elf"; \
 	copy_sdk() { \
 		f="$$1"; found=""; \
 		for cand in "$$f" "$$(printf '%s' "$$f" | tr '[:upper:]' '[:lower:]')" "$$(printf '%s' "$$f" | tr '[:lower:]' '[:upper:]')"; do \
@@ -997,7 +1110,7 @@ count:
 #   make iso roms=<pasta> bgm=<pasta> # + soundtracks .mod/.xm (cdfs:/BGM)
 
 ISO_GAME_ID   ?= SLUS_999.99
-ISO_GAME_NAME ?= SNESticle_Revive$(VER_SUFFIX)
+ISO_GAME_NAME ?= SNESticle_Aurora$(VER_SUFFIX)
 ISO_LABEL     ?= SNESTICLE_REVIVE
 ISO_ROOT_DIR  ?= $(OBJ_DIR)/iso_root
 ISO_OUT       ?= $(OBJ_DIR)/$(ISO_GAME_ID).$(ISO_GAME_NAME).iso
@@ -1304,7 +1417,7 @@ help:
 	printf "  make clean                   Delete build folder\n"; \
 	printf "\n"; \
 	printf "$${green}Output commands:$${reset}\n"; \
-	printf "  make OUT=/sdcard             Build and copy SNESticle.elf to OUT\n"; \
+	printf "  make OUT=/sdcard             Build and copy SNESticle_Aurora.elf to OUT\n"; \
 	printf "  make out=/sdcard             Same as OUT=/sdcard\n"; \
 	printf "  make elf OUT=/sdcard         Build ELF/packed ELF and copy to OUT\n"; \
 	printf "  make iso ROMS=/path OUT=/out Build ISO with ROM folder and copy to OUT\n"; \
@@ -1335,6 +1448,7 @@ help:
 	printf "  SNES_DIAGNOSTICS=2           Deep OBJ/DMA/GSU capture (measurable overhead)\n"; \
 	printf "  SNES_OBJ_CACHE=0             Disable shared CHR cache for OBJ A/B only\n"; \
 	printf "  SNES_BG_CACHE=1              Enable experimental BG CHR cache for A/B only\n"; \
+	printf "  SNES_CHR_HFLIP_CACHE=0       Disable pre-flipped 4bpp rows for Top Gear A/B\n"; \
 	printf "  OUT=/path                    Copy final ELF to this folder\n"; \
 	printf "  out=/path                    Same as OUT=/path\n"; \
 	printf "  ROMS=/path                   ROM folder for ISO build\n"; \

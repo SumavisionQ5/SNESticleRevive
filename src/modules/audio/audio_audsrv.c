@@ -125,9 +125,106 @@ void DLog(const char *fmt, ...)
 static short _interleave_buf[AUD_MAX_ENQUEUE_SAMPLES * AUD_AUDSRV_CHANNELS]
     __attribute__((aligned(64)));
 
+/* AURORA_GAMEPLAY_HEADROOM_V1
+ * Dedicated BSS-zero buffer: never clobber the real interleave scratch.
+ * 2048 frames = 8192 bytes ~= 42.7 ms at 48 kHz stereo. */
+#define AUD_GAMEPLAY_HEADROOM_SAMPLES 2048
+static short _gameplay_silence[
+    AUD_GAMEPLAY_HEADROOM_SAMPLES * AUD_AUDSRV_CHANNELS]
+    __attribute__((aligned(64)));
+
+/* AURORA_AUDIO_ASYNC_FIFO_V2
+ *
+ * The audsrv port called Aud_EnqueueAsync() but still blocked in
+ * audsrv_wait_audio(). Stage gameplay PCM here instead.
+ *
+ * AURORA_AUDIO_OVERFLOW_NOBLOCK_V4_1
+ * 65536 stereo frames ~= 1365 ms @ 48 kHz, 256 KiB total.
+ * Normal occupancy should still stay around one frame (~800 samples).
+ * The extra 64 KiB is only shock-absorber headroom for rare host/IOP stalls.
+ */
+#define AUD_ASYNC_FIFO_SAMPLES 65536
+static short _async_left[AUD_ASYNC_FIFO_SAMPLES]
+    __attribute__((aligned(64)));
+static short _async_right[AUD_ASYNC_FIFO_SAMPLES]
+    __attribute__((aligned(64)));
+static int aud_async_head = 0;
+static int aud_async_count = 0;
+
+/* AURORA_AUDIO_RPC_JITTER_V3
+ *
+ * audsrv_available() is itself a synchronous SIF RPC. Cache only a LOWER
+ * BOUND of free ring space: after a probe subtract every frame sent, but
+ * never add frames the IOP consumed meanwhile. The cache may become
+ * pessimistic, never optimistic.
+ */
+#define AUD_ASYNC_RING_MARGIN_SAMPLES  32
+/* AURORA_AUDIO_BACKLOG_CATCHUP_V2
+ * AURORA_AUDIO_FAILSOFT_POSTVBLANK_V1
+ *
+ * 4095 stereo frames = 16380 bytes: exactly one maximum-sized copy in the
+ * PS2SDK audsrv EE staging buffer (sizeof(sbuff)-sizeof(int)).
+ * Normal ~one-frame sends are unchanged; only an accumulated backlog can use
+ * the larger burst.
+ *
+ * aud_async_cached_avail remains a LOWER BOUND. Successful sends subtract
+ * space, while IOP consumption is never guessed/added. Therefore a fresh
+ * audsrv_available() RPC is needed only when the cache is unknown or nearly
+ * exhausted; periodic refreshes while the lower bound is already sufficient
+ * add synchronous SIF jitter without adding safety. */
+#define AUD_ASYNC_MAX_BURST_SAMPLES  4095
+static int aud_async_cached_avail = -1;
+
+
+/* AURORA_V83_AUDIO_PACKED_STEREO
+ * The EE build is little-endian and the destination is 64-byte aligned.
+ * One 32-bit store writes exactly the same L-low/L-high/R-low/R-high bytes
+ * as the two 16-bit assignments it replaces.  This changes no PCM sample,
+ * queue size, scheduler decision or audsrv call. */
+static inline void Aud_StoreStereoFrame(int index, short left, short right)
+{
+    ((u32 *)(void *)_interleave_buf)[index] =
+        (u32)(u16)left | ((u32)(u16)right << 16);
+}
+
 
 static int sjpcm_inited = 0;
 static int sjpcm_playing = 0;
+
+/* AURORA_V7_AUDSRV_GUARD
+ * PS2SDK audsrv uses a pointer-only ring buffer and cannot distinguish a
+ * completely empty queue from a completely full one.  Keep generous valid
+ * headroom and apply an extremely small, bounded queue servo only when the
+ * stream drifts well outside its normal band.  Nominal frames are untouched. */
+#define AUD_WAKE_PRIME_SAMPLES       768
+#define AUD_GUARD_WARMUP_ENQUEUES    120
+#define AUD_GUARD_POLL_ENQUEUES      16
+#define AUD_GUARD_LOW_SAMPLES        2560
+#define AUD_GUARD_HIGH_SAMPLES       3840
+#define AUD_GUARD_ADJUST_SAMPLES     2
+static unsigned int aud_guard_enqueues = 0;
+
+/* AURORA_COMPAT_AUDIO_STATE
+ * 0/0 is exactly the V8.5 path. */
+static int aud_compat_small_chunks = 0;
+static int aud_compat_deep_queue = 0;
+
+void Aud_SetCompatSmallChunks(int enabled)
+{
+    aud_compat_small_chunks = enabled ? 1 : 0;
+}
+int Aud_GetCompatSmallChunks(void)
+{
+    return aud_compat_small_chunks;
+}
+void Aud_SetCompatDeepQueue(int enabled)
+{
+    aud_compat_deep_queue = enabled ? 1 : 0;
+}
+int Aud_GetCompatDeepQueue(void)
+{
+    return aud_compat_deep_queue;
+}
 
 /* audsrv_stop_audio() does more than empty its queue: it leaves the IOP
    mixer stopped until the next audsrv_play_audio() call.  Keep that state
@@ -140,14 +237,253 @@ static void Aud_WakeAudsrv(void)
     if (!sjpcm_inited || sjpcm_playing)
         return;
 
-    /* A tiny silent block is enough to restart audsrv.  It also gives
-       audsrv_queued()/available() a deterministic state before producers
-       decide whether there is room to enqueue their first real block. */
-    memset(_interleave_buf, 0, 64 * AUD_BYTES_PER_SAMPLE);
-    ret = audsrv_play_audio((const char *)_interleave_buf,
-                            64 * AUD_BYTES_PER_SAMPLE);
+    /* AURORA_V7_AUDSRV_PRIME
+       Keep ~16 ms of known-valid silence beyond audsrv's built-in half-ring
+       startup cushion.  The old 64-frame prime was only ~1.3 ms and left too
+       little protection against an isolated slow EE frame. */
+    {
+        const int prime_samples =
+            aud_compat_deep_queue ? 1024 : AUD_WAKE_PRIME_SAMPLES;
+        memset(_interleave_buf, 0,
+               prime_samples * AUD_BYTES_PER_SAMPLE);
+        ret = audsrv_play_audio((const char *)_interleave_buf,
+                                prime_samples * AUD_BYTES_PER_SAMPLE);
+    }
     if (ret >= 0)
         sjpcm_playing = 1;
+}
+
+
+static void Aud_AsyncReset(void)
+{
+    aud_async_head = 0;
+    aud_async_count = 0;
+    aud_async_cached_avail = -1;
+}
+
+void Aud_AsyncDiscardPending(void)
+{
+    Aud_AsyncReset();
+}
+
+static void Aud_AsyncCopyIn(short *left, short *right, int size)
+{
+    int tail;
+    int first;
+    int second;
+
+    if (size <= 0)
+        return;
+
+    tail = aud_async_head + aud_async_count;
+    if (tail >= AUD_ASYNC_FIFO_SAMPLES)
+        tail -= AUD_ASYNC_FIFO_SAMPLES;
+
+    first = AUD_ASYNC_FIFO_SAMPLES - tail;
+    if (first > size)
+        first = size;
+    second = size - first;
+
+    memcpy(&_async_left[tail], left, (size_t)first * sizeof(short));
+    memcpy(&_async_right[tail], right, (size_t)first * sizeof(short));
+
+    if (second > 0)
+    {
+        memcpy(&_async_left[0], left + first,
+               (size_t)second * sizeof(short));
+        memcpy(&_async_right[0], right + first,
+               (size_t)second * sizeof(short));
+    }
+
+    aud_async_count += size;
+}
+
+/* Drain at most one contiguous FIFO span.
+ * wait=0 is the normal gameplay path and NEVER calls audsrv_wait_audio().
+ * Keep two sample-frames free because the existing servo may add at most 2.
+ * wait=1 is only a deep-backlog / explicit-Wait safety valve.
+ */
+static int Aud_AsyncDrainOne(int wait)
+{
+    int n;
+
+    if (!sjpcm_inited || aud_async_count <= 0)
+        return 0;
+
+    n = AUD_ASYNC_FIFO_SAMPLES - aud_async_head;
+    if (n > aud_async_count)
+        n = aud_async_count;
+    if (n > AUD_MAX_ENQUEUE_SAMPLES)
+        n = AUD_MAX_ENQUEUE_SAMPLES;
+
+    if (wait)
+    {
+        /* Rare overflow / explicit Aud_Wait fallback. Keep V2's lossless
+           blocking behavior away from the normal gameplay path. */
+        Aud_Enqueue(&_async_left[aud_async_head],
+                    &_async_right[aud_async_head],
+                    n, 1);
+
+        aud_async_head += n;
+        if (aud_async_head >= AUD_ASYNC_FIFO_SAMPLES)
+            aud_async_head -= AUD_ASYNC_FIFO_SAMPLES;
+        aud_async_count -= n;
+        aud_async_cached_avail = -1;
+            return n;
+    }
+
+    {
+        int usable;
+        int i;
+        int bytes;
+        int sent_bytes;
+        int sent_frames;
+        int short_write;
+
+        /* AURORA_AUDIO_FAILSOFT_POSTVBLANK_V1
+         * Aud_Available() is a synchronous EE<->IOP RPC. The cache is a
+         * conservative LOWER bound, so refreshing it while it already proves
+         * sufficient free space cannot improve correctness. Probe only when
+         * unknown/low. */
+        if (aud_async_cached_avail < 0 ||
+            aud_async_cached_avail <= AUD_ASYNC_RING_MARGIN_SAMPLES)
+        {
+            aud_async_cached_avail = Aud_Available();
+        }
+
+        if (aud_async_cached_avail <= AUD_ASYNC_RING_MARGIN_SAMPLES)
+            return 0;
+
+        usable = aud_async_cached_avail - AUD_ASYNC_RING_MARGIN_SAMPLES;
+        if (n > usable)
+            n = usable;
+        if (n > AUD_ASYNC_MAX_BURST_SAMPLES)
+            n = AUD_ASYNC_MAX_BURST_SAMPLES;
+        if (aud_compat_small_chunks && n > 256)
+            n = 256;
+
+        if (n <= 0)
+            return 0;
+
+        /* Direct interleave for the exact contiguous FIFO prefix.
+           This bypasses Aud_Enqueue's periodic audsrv_queued() servo RPC
+           on the hot async path. The rational frame scheduler remains the
+           emulated-audio clock authority. */
+        for (i = 0; i < n; i++)
+        {
+            Aud_StoreStereoFrame(
+                i,
+                _async_left[aud_async_head + i],
+                _async_right[aud_async_head + i]
+            );
+        }
+
+        bytes = n * AUD_BYTES_PER_SAMPLE;
+
+        /* <= 16380 bytes in Standard mode: exactly one maximum-sized
+           PLAY_AUDIO copy in PS2SDK's EE staging buffer. audsrv may accept
+           only a prefix; consume exactly the complete stereo frames reported. */
+        sent_bytes = audsrv_play_audio((const char *)_interleave_buf, bytes);
+        if (sent_bytes <= 0)
+        {
+            aud_async_cached_avail = -1;
+                    return 0;
+        }
+
+        sent_frames = sent_bytes / AUD_BYTES_PER_SAMPLE;
+        if (sent_frames > n)
+            sent_frames = n;
+        if (sent_frames <= 0)
+        {
+            aud_async_cached_avail = -1;
+                    return 0;
+        }
+
+        /* If the server accepted less than our conservative lower-bound
+           request, some assumption changed (for example another producer).
+           Never carry a potentially optimistic cache into the next drain. */
+        short_write = (sent_frames < n) ? 1 : 0;
+
+        aud_async_head += sent_frames;
+        if (aud_async_head >= AUD_ASYNC_FIFO_SAMPLES)
+            aud_async_head -= AUD_ASYNC_FIFO_SAMPLES;
+        aud_async_count -= sent_frames;
+
+        if (short_write)
+        {
+            aud_async_cached_avail = -1;
+                }
+        else
+        {
+            aud_async_cached_avail -= sent_frames;
+            if (aud_async_cached_avail < 0)
+                aud_async_cached_avail = 0;
+        }
+
+        sjpcm_playing = 1;
+        return sent_frames;
+    }
+}
+
+
+/* Prepare a bounded reservoir before the first gameplay frame.
+ *
+ * audsrv is shared by menu BGM and game audio, so queue depth at the exact
+ * menu->game transition can vary. Inspect it once and append only missing
+ * ZERO PCM. Existing queued audio is untouched.
+ *
+ * No real PCM is dropped, repeated, resampled or time-stretched.
+ */
+void Aud_PrepareGameplayHeadroom(void)
+{
+    int queued_bytes;
+    int queued_samples;
+    int need_samples;
+    int remaining_bytes;
+    const int target_samples = aud_compat_deep_queue
+        ? 2560 : AUD_GAMEPLAY_HEADROOM_SAMPLES;
+
+    if (!sjpcm_inited)
+        return;
+
+    queued_bytes = audsrv_queued();
+    if (queued_bytes < 0)
+        return;
+
+    queued_samples = queued_bytes / AUD_BYTES_PER_SAMPLE;
+    need_samples = target_samples - queued_samples;
+    if (need_samples <= 0)
+        return;
+
+    remaining_bytes = need_samples * AUD_BYTES_PER_SAMPLE;
+
+    while (remaining_bytes > 0)
+    {
+        int chunk = remaining_bytes;
+        int sent;
+
+        /* AURORA_AUDIO_FAILSOFT_POSTVBLANK_V1
+         * Transition priming is best-effort too. Never call wait_audio():
+         * if the IOP ring cannot accept the requested silence immediately,
+         * keep whatever headroom already exists and let gameplay continue.
+         *
+         * _gameplay_silence is 2048 stereo frames = 8192 bytes, still below
+         * PS2SDK audsrv's single-copy 16380-byte staging limit. */
+        if (chunk > (int)sizeof(_gameplay_silence))
+            chunk = (int)sizeof(_gameplay_silence);
+
+        sent = audsrv_play_audio((const char *)_gameplay_silence, chunk);
+        if (sent <= 0)
+            break;
+
+        remaining_bytes -= sent;
+        sjpcm_playing = 1;
+
+        /* Short write means the IOP ring reached its current safe capacity.
+           Do not spin or wait for more room. */
+        if (sent < chunk)
+            break;
+    }
 }
 
 
@@ -202,6 +538,9 @@ int Aud_Init(int sync, int numsamples, int maxenqueuesamples)
     /* Prime audsrv before a producer asks queued()/available(). */
     sjpcm_inited = 1;
     sjpcm_playing = 0;
+    /* AURORA_V7_AUD_GUARD_RESET_INIT */
+    aud_guard_enqueues = 0;
+    Aud_AsyncReset();
     Aud_WakeAudsrv();
     return 0;
 }
@@ -214,6 +553,7 @@ void Aud_Quit(void)
     audsrv_quit();
     sjpcm_inited = 0;
     sjpcm_playing = 0;
+    Aud_AsyncReset();
 }
 
 
@@ -234,6 +574,9 @@ void Aud_Pause(void)
     if (!sjpcm_inited) return;
     audsrv_stop_audio();
     sjpcm_playing = 0;
+    /* AURORA_V7_AUD_GUARD_RESET_PAUSE */
+    aud_guard_enqueues = 0;
+    Aud_AsyncReset();
 }
 
 
@@ -242,6 +585,9 @@ void Aud_Clearbuff(void)
     if (!sjpcm_inited) return;
     audsrv_stop_audio();
     sjpcm_playing = 0;
+    /* AURORA_V7_AUD_GUARD_RESET_CLEAR */
+    aud_guard_enqueues = 0;
+    Aud_AsyncReset();
 }
 
 
@@ -306,22 +652,124 @@ void Aud_Enqueue(short *left, short *right, int size, int wait)
 {
     int i;
     int bytes;
+    const char *src;
+    int remaining;
 
     if (!sjpcm_inited) return;
     if (size <= 0) return;
     if (size > AUD_MAX_ENQUEUE_SAMPLES) size = AUD_MAX_ENQUEUE_SAMPLES;
 
-    for (i = 0; i < size; i++)
+    /* AURORA_V81_AUD_ONE_SHOT_SERVO
+     * The rational 59.94/50-Hz frame scheduler remains the clock authority.
+     * Poll audsrv only once every 16 enqueues after warm-up, and make at most
+     * ONE +/-2-sample-frame correction on that poll block.  This restores
+     * queue margin slowly without creating a periodic pitch correction. */
+    int aud_adjust_now = 0;
+    if (aud_guard_enqueues >= AUD_GUARD_WARMUP_ENQUEUES &&
+        (aud_guard_enqueues % AUD_GUARD_POLL_ENQUEUES) == 0)
     {
-        _interleave_buf[i * 2 + 0] = left[i];
-        _interleave_buf[i * 2 + 1] = right[i];
+        int queued_bytes = audsrv_queued();
+        if (queued_bytes >= 0)
+        {
+            int queued_samples = queued_bytes / AUD_BYTES_PER_SAMPLE;
+            const int guard_low =
+                aud_compat_deep_queue ? 3072 : AUD_GUARD_LOW_SAMPLES;
+            const int guard_high =
+                aud_compat_deep_queue ? 4096 : AUD_GUARD_HIGH_SAMPLES;
+            if (queued_samples < guard_low)
+                aud_adjust_now = AUD_GUARD_ADJUST_SAMPLES;
+            else if (queued_samples > guard_high)
+                aud_adjust_now = -AUD_GUARD_ADJUST_SAMPLES;
+        }
+    }
+    aud_guard_enqueues++;
+
+    if (aud_adjust_now > 0 &&
+        size > aud_adjust_now &&
+        size + aud_adjust_now <= AUD_MAX_ENQUEUE_SAMPLES)
+    {
+        int out = 0;
+        int acc = size / 2;
+        const int add = aud_adjust_now;
+        for (i = 0; i < size; i++)
+        {
+            Aud_StoreStereoFrame(out, left[i], right[i]);
+            out++;
+            acc += add;
+            if (acc >= size)
+            {
+                acc -= size;
+                _interleave_buf[out * 2 + 0] = left[i];
+                _interleave_buf[out * 2 + 1] = right[i];
+                out++;
+            }
+        }
+        size = out;
+    }
+    else if (aud_adjust_now < 0 && size > -aud_adjust_now)
+    {
+        int out = 0;
+        int acc = size / 2;
+        const int remove = -aud_adjust_now;
+        for (i = 0; i < size; i++)
+        {
+            acc += remove;
+            if (acc >= size)
+            {
+                acc -= size;
+                continue;
+            }
+            Aud_StoreStereoFrame(out, left[i], right[i]);
+            out++;
+        }
+        size = out;
+    }
+    else
+    {
+        for (i = 0; i < size; i++)
+        {
+            Aud_StoreStereoFrame(i, left[i], right[i]);
+        }
     }
 
     bytes = size * AUD_BYTES_PER_SAMPLE;
 
     if (wait)
     {
-        audsrv_wait_audio(bytes);
+        /* AURORA_MEGA_V4_AUDSRV_LOSSLESS_CHUNKS
+         * PS2SDK audsrv truncates play_audio() to the room available in its
+         * IOP ring. wait_audio() guarantees its requested amount, but the
+         * ring starts only half-free after set_format(). Keep each request
+         * <= 4096 bytes: below the initial free window and normally one whole
+         * emulator frame. A rare short positive write is retried from the
+         * exact unsent byte, so PCM is neither dropped nor duplicated. */
+        src = (const char *)_interleave_buf;
+        remaining = bytes;
+        {
+            const int chunk_limit = aud_compat_small_chunks ? 1024 : 4096;
+            while (remaining > 0)
+            {
+                int chunk = remaining;
+                int sent;
+
+                if (chunk > chunk_limit)
+                    chunk = chunk_limit;
+
+            if (audsrv_wait_audio(chunk) != AUDSRV_ERR_NOERROR)
+                return;
+
+            sent = audsrv_play_audio(src, chunk);
+            if (sent < 0)
+                return;
+            if (sent == 0)
+                continue;
+
+                src += sent;
+                remaining -= sent;
+                sjpcm_playing = 1;
+            }
+        }
+        return;
     }
 
     if (audsrv_play_audio((const char *)_interleave_buf, bytes) >= 0)
@@ -330,35 +778,60 @@ void Aud_Enqueue(short *left, short *right, int size, int wait)
 
 
 /*
-    The original async API let AudMixBuffer overlap RPC traffic with
-    the next SNES frame via a SIF callback + semaphore handshake.
-    audsrv_play_audio is already non-blocking when there is room in the
-    ring buffer, and audsrv_wait_audio handles back-pressure when there
-    isn't, so the async path collapses into the synchronous one.
-*/
+ * AURORA_AUDIO_ASYNC_FIFO_V2
+ * Gameplay emulation must not wait for IOP ring SPACE inside a frame.
+ */
 void Aud_BufferedAsyncStart(void)
 {
-    /* nothing to do - audsrv tracks queued bytes internally */
+    int budget = aud_compat_small_chunks ? 4 : 1;
+
+    while (budget-- > 0 && aud_async_count > 0)
+    {
+        if (Aud_AsyncDrainOne(0) <= 0)
+            break;
+    }
 }
 
 
 int Aud_BufferedAsyncGet(void)
 {
-    return Aud_Buffered();
+    return Aud_Buffered() + aud_async_count;
 }
 
 
 void Aud_EnqueueAsync(short *left, short *right, int size)
 {
-    Aud_Enqueue(left, right, size, 0);
+    if (!sjpcm_inited || !left || !right || size <= 0)
+        return;
+
+    if (size > AUD_MAX_ENQUEUE_SAMPLES)
+        size = AUD_MAX_ENQUEUE_SAMPLES;
+
+    /* V3: producer is RAM-only. The post-frame hook owns IOP RPC. */
+
+    /* AURORA_AUDIO_OVERFLOW_NOBLOCK_V4
+     *
+     * Last-resort only. If >~1.36 s of exact gameplay PCM is already staged,
+     * the audio backend is catastrophically behind. The former safety path
+     * could block waiting for IOP ring space.
+     *
+     * Do NOT turn an audio failure into a CPU/video hitch. Preserve every
+     * already-staged sample in order and drop only this NEW block. Under
+     * normal operation this branch is never reached. */
+    if (aud_async_count + size > AUD_ASYNC_FIFO_SAMPLES)
+        return;
+
+    Aud_AsyncCopyIn(left, right, size);
 }
 
 
 void Aud_Wait(void)
 {
-    /* audsrv ring-buffer back-pressure is handled inside Enqueue via
-       audsrv_wait_audio when the caller passes wait=1, so there is no
-       extra synchronisation to perform here. */
+    while (aud_async_count > 0)
+    {
+        if (Aud_AsyncDrainOne(1) <= 0)
+            break;
+    }
 }
 
 

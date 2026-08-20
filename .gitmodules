@@ -1,0 +1,4 @@
+[submodule "src/third_party/quicknes"]
+	path = src/third_party/quicknes
+	url = https://github.com/itsveenee/QuickNES_Core.git
+	branch = master

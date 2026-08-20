@@ -16,19 +16,17 @@ extern "C" {
    raise the PCM amplitude here, with int16 saturation (loud games clip
    rather than wrap around).
 
-   The user-facing "Game Volume" (Video Config) is 0..100, where 100 maps
-   to AUDMIXBUFFER_BASE_GAIN_PCT (the loudness this build shipped with) and
-   0 mutes:  gainPct = s_gameVolume * BASE / 100.  This single AudMixBuffer
-   instance (_AudMix) is shared by SNES and NES, so the control applies to
-   both. */
-#define AUDMIXBUFFER_BASE_GAIN_PCT 398
-
-static int s_gameVolume = 100;   /* 0..100 (Video Config); 100 = base gain */
+   The internal Game Volume value is the actual PCM gain percentage:
+   0 = mute, 100 = unity, 200 = Aurora's shipped/default gain, 400 = max.
+   Video Config deliberately shows half of this value, so 200 internal is
+   displayed as 100 and 400 internal as 200.  The single AudMixBuffer
+   instance (_AudMix) is shared by SNES and NES. */
+static int s_gameVolume = 200;   /* internal gain percent: 0..400 */
 
 extern "C" void AudMixGameSetVolume(int vol)
 {
     if (vol < 0)   vol = 0;
-    if (vol > 100) vol = 100;
+    if (vol > 400) vol = 400;
     s_gameVolume = vol;
 }
 
@@ -42,6 +40,9 @@ AudMixBuffer::AudMixBuffer(Uint32 uSampleRate, Bool bAsync)
 {
     m_uSampleRate = uSampleRate;
     m_bAsync      = bAsync;
+    /* AURORA_MEGA_V2_AUDIO_CLOCK_INIT */
+    m_uFrameRateNum = 60;
+    m_uFrameRateDen = 1;
     Reset();
 }
 
@@ -87,8 +88,10 @@ Int32 AudMixBuffer::GetOutputSamples()
      * audsrv pode ter underrun, mas nunca tentamos "pagar a divida" dobrando
      * o custo do mixer no proximo quadro.
      */
-    nSamples = AudFrameScheduleNext(&m_uFrameSamplePhase,
-                                    m_uSampleRate, 60, 4);
+    nSamples = AudFrameScheduleNextRational(&m_uFrameSamplePhase,
+                                            m_uSampleRate,
+                                            m_uFrameRateNum,
+                                            m_uFrameRateDen, 4);
 
     m_uLastOutput  = nSamples;
     return nSamples;
@@ -278,8 +281,34 @@ void AudMixBuffer::Flush()
            so it covers every sample-rate path (32k resampled and 48k
            passthrough).  gainPct==100 (Game Volume 50) is unity -> skip. */
         {
-            Int32 gainPct = (s_gameVolume * AUDMIXBUFFER_BASE_GAIN_PCT) / 100;
-            if (gainPct != 100)
+            Int32 gainPct = s_gameVolume;
+            /* AURORA_MEGA_V4_AUDIO_GAIN_FASTPATH
+             * Internal Game Volume 200 (shown as 100) is the shipped 200% gain. For every int16
+             * input, (sample * 200) / 100 is exactly sample * 2; retain the
+             * identical saturation but avoid a division per channel/sample.
+             * Muting is likewise exactly an all-zero byte plane. Every other
+             * user volume keeps the original formula and rounding. */
+            if (gainPct == 0)
+            {
+                memset(m_OutData[0], 0, nOutSamples * sizeof(Int16));
+                memset(m_OutData[1], 0, nOutSamples * sizeof(Int16));
+            }
+            else if (gainPct == 200)
+            {
+                Int32 ch, i;
+                for (ch = 0; ch < 2; ch++)
+                {
+                    Int16 *p = m_OutData[ch];
+                    for (i = 0; i < nOutSamples; i++)
+                    {
+                        Int32 v = (Int32)p[i] * 2;
+                        if (v >  32767) v =  32767;
+                        if (v < -32768) v = -32768;
+                        p[i] = (Int16)v;
+                    }
+                }
+            }
+            else if (gainPct != 100)
             {
                 Int32 ch, i;
                 for (ch = 0; ch < 2; ch++)

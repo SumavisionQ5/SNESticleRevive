@@ -48,6 +48,7 @@ CNetworkScreen *_MainLoop_pNetworkScreen;
 CMenuScreen    *_MainLoop_pMenuScreen;
 CMenuScreen    *_MainLoop_pStateScreen;
 CMenuScreen    *_MainLoop_pStateDeviceScreen;
+CMenuScreen    *_MainLoop_pStateConfirmScreen;
 CMenuScreen    *_MainLoop_pMemCardFormatScreen;
 CLogScreen     *_MainLoop_pLogScreen;
 CVideoScreen   *_MainLoop_pVideoScreen;
@@ -78,7 +79,7 @@ Char _RomPath[1024];
 
 #if MAINLOOP_MEMCARD
 Char _SramPath[256] = "mc0:/SNESticle";
-Char _MainLoop_SaveTitle[] = "SNESticle Revive";
+Char _MainLoop_SaveTitle[] = "SNESticle Aurora";
 #else
 Char _SramPath[256] = "host0:/cygdrive/d/emu/";
 #endif

@@ -49,8 +49,14 @@ public:
     void 	SetRom(class Emu::Rom *pRom);
     void	SetSnesRom(SnesRom *pRom);
     void	Reset();
-    void	SoftReset();
+	void	SoftReset();
 	void	ExecuteFrame(Emu::SysInputT *pInput, class CRenderSurface *pTarget, class CMixBuffer *pSound, ModeE eMode);
+
+	/* Host-only peripheral injection; SysInputT/save-state layout stays fixed. */
+	void	SetMouseInput(Bool bConnected, Int32 nDeltaX, Int32 nDeltaY, Uint32 uButtons)
+	{
+		m_IO.SetMouseInput(bConnected, nDeltaX, nDeltaY, uButtons);
+	}
 
     void	SaveState(struct SnesStateT *pState);
     Bool	RestoreState(struct SnesStateT *pState);
@@ -108,6 +114,15 @@ Bool            m_bRegionLocked;
 	SNSpcDspMixSilent	m_SpcDspSilentMixer;    // deterministic mixer
 
 	Uint32		m_uSramSize;
+#if SNES_HVIRQ_RESCHEDULE
+	/* AURORA_HVIRQ_RESCHEDULE_V4 -- transient per-scanline scheduler state. */
+	Bool		m_bLineIRQActive;
+	Bool		m_bLineIRQReschedule;
+	Bool		m_bLineIRQFired;
+	Bool		m_bLineIRQInstant;
+	Int32		m_nLineIRQCycle;
+	Int32		m_nLineIRQClock;
+#endif
 	Uint8		m_Ram[SNES_RAMSIZE] _ALIGN(16);
 	Uint8		m_SRam[SNES_SRAMSIZE] _ALIGN(16);
 
@@ -151,6 +166,10 @@ private:
 
 	void	SyncSPC(Int32 uExtra = 0);
 	void	SyncPPU();
+#if SNES_HVIRQ_RESCHEDULE
+	Int32	CalculateLineIRQCycle();
+	void	RescheduleLineIRQ(Bool bAllowImmediate);
+#endif
 	void	ExecuteLine();
     void    ExecuteWithIRQ(Int32 nCycles, Int32 &nIRQCycles);
     void    ExecuteCPU(Int32 nExecCycles);

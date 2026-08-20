@@ -78,6 +78,11 @@ typedef struct SNCpu_t
 	   This reuses the old padding byte, so the PS2 assembly layout is stable. */
 	Uint8				uNmiDmaDelay;
 
+	/* AURORA_SPEEDY_MDR_CPU_LAYOUT_V1
+	   S-CPU memory data register / open-bus latch. This consumes byte 51,
+	   formerly alignment padding, so Bank[] remains at ASM offset 52. */
+	Uint8				uMDR;
+
 #if defined(SNCPU_TEST) && SNCPU_TEST
 	/* Host-only instruction-vector accounting.  Kept out of release builds so
 	   the hand-written PS2 assembly layout remains unchanged. */
@@ -87,6 +92,30 @@ typedef struct SNCpu_t
 	SNCpuBankT			Bank[SNCPU_BANK_NUM];			// cpu memory banks
 
 } SNCpuT;
+
+/* AURORA_CPU_OVERCLOCK_V1
+ * Optional S-CPU-only timing hack. OFF is bit-for-bit the original 6/8
+ * master-clock profile. Higher levels reduce only S-CPU instruction/memory
+ * costs; PPU/APU/frame clocks and DMA/HDMA physical time are untouched. */
+enum
+{
+	SNCPU_OVERCLOCK_OFF = 0,
+	SNCPU_OVERCLOCK_120,
+	SNCPU_OVERCLOCK_150,
+	SNCPU_OVERCLOCK_200,
+	SNCPU_OVERCLOCK_300,
+	SNCPU_OVERCLOCK_NUM
+};
+
+extern Uint8 g_SnesCpuOverclockLevel;
+extern Uint8 g_SnesCpuInternalCycle;
+extern Uint8 g_SnesCpuSlowCycle;
+
+void  SNCPUSetOverclockLevel(SNCpuT *pCpu, Uint8 uLevel);
+static _INLINE Uint8 SNCPUGetOverclockLevel(void)
+{
+	return g_SnesCpuOverclockLevel;
+}
 
 
 void SNCPUNew(SNCpuT *pCpu);

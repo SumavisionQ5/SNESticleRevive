@@ -19,6 +19,7 @@
 #include "mainloop_state.h"
 #include "mainloop_exec.h"
 #include "mainloop_iop.h"
+#include "gskit_backend.h"
 
 #include "types.h"
 #include "console.h"
@@ -43,6 +44,13 @@ extern "C" {
 };
 
 static Uint32 _iframetex=0;
+
+/* AURORA_GAMEPLAY_HEADROOM_TRANSITION
+ * Host-audio warmup state only; no emulated/save-state state. */
+static Bool _AudioGameplayWasActive = FALSE;
+static Emu::System *_AudioGameplaySystem = NULL;
+static Bool _SnesMouseWasActive = FALSE;
+static Bool _UsbMouseGameplayWasActive = FALSE;
 
 
 Bool MainLoopProcess()
@@ -81,6 +89,21 @@ Bool MainLoopProcess()
 //	_MainLoopInputProcess(InputGetPadData(0));
 //	_MainLoopInputProcess(InputGetPadData(1));
 
+    {
+        const Bool bGameplayNow =
+            (!_bMenu && _pSystem && !_MainLoop_BlackScreen) ? TRUE : FALSE;
+
+        if (bGameplayNow &&
+            (!_AudioGameplayWasActive || _AudioGameplaySystem != _pSystem))
+        {
+            /* Fill host-audio safety headroom BEFORE the first cold frame. */
+            Aud_PrepareGameplayHeadroom();
+            _AudioGameplaySystem = _pSystem;
+        }
+
+        _AudioGameplayWasActive = bGameplayNow;
+    }
+
     if (!_bMenu && _pSystem && !_MainLoop_BlackScreen)
     {
         CRenderSurface *pSurface;
@@ -88,8 +111,21 @@ Bool MainLoopProcess()
         pSurface = _fbTexture[_iframetex];
 	
 		Emu::SysInputT Input;
+		Bool bSnesMouse = FALSE;
+		Int32 nSnesMouseX = 0;
+		Int32 nSnesMouseY = 0;
+		Uint32 uSnesMouseButtons = 0;
 	
 		Int32 iPad;
+
+		/* AURORA_AUTO_SNES_MOUSE_V1_5
+		 * Mouse replaces only SNES gameplay port 1. Pads remain polled for
+		 * menus and frontend hotkeys. */
+		if (_pSystem == _pSnes && InputSnesMouseShouldUse())
+		{
+			bSnesMouse = TRUE;
+			InputGetMouseData(&nSnesMouseX, &nSnesMouseY, &uSnesMouseButtons);
+		}
 
         /*
         if (_WavFile.IsOpen())
@@ -106,7 +142,11 @@ Bool MainLoopProcess()
 		// read inputs
 		for (iPad=0; iPad < 5; iPad++)
 		{
-			if (InputIsPadConnected(iPad))
+			if (bSnesMouse && iPad == 0)
+			{
+				Input.uPad[iPad] = EMUSYS_DEVICE_DISCONNECTED;
+			}
+			else if (InputIsPadConnected(iPad))
 			{
 				/* OR the digital pad bits with d-pad bits synthesised from
 				   the left analog stick so the analog stick drives the SNES
@@ -225,12 +265,32 @@ Bool MainLoopProcess()
             }
             else
             {
-                _ExecuteSnes(pSurface, pMixBuffer, &Input, eMode);
+                /* AURORA_MEGA_V2_SNES_AUDIO_CLOCK
+                   Match produced PCM to the GS VBlank clock. Keep this
+                   SNES-only so the QuickNES path is unchanged. */
+                if (_AudMix)
+                {
+                    Uint32 uRateNum = 60, uRateDen = 1;
+                    GSK_GetRefreshRate(&uRateNum, &uRateDen);
+                    _AudMix->SetFrameRateRational(uRateNum, uRateDen);
+                }
+				if (bSnesMouse)
+					Input.uPad[0] = EMUSYS_DEVICE_DISCONNECTED;
+				if (bSnesMouse || _SnesMouseWasActive)
+					_pSnes->SetMouseInput(
+						bSnesMouse,
+						nSnesMouseX,
+						nSnesMouseY,
+						uSnesMouseButtons);
+				_SnesMouseWasActive = bSnesMouse;
+				_ExecuteSnes(pSurface, pMixBuffer, &Input, eMode);
             }
 		    _iframetex^=1;
         }
 
-        Aud_BufferedAsyncStart();
+        /* AURORA_AUDIO_FAILSOFT_POSTVBLANK_V1
+         * Host-audio RPC drain moved to MainLoopRender(), AFTER GSK_SyncFlip.
+         * Do not spend synchronous SIF time before this frame is presented. */
     }
 
     _MainLoopCheckSRAM();
@@ -240,6 +300,19 @@ Bool MainLoopProcess()
 	_MenuRuntimeUpdate();
 
 	MainLoopRender();
+
+	/* AURORA_MOUSE_EXPLICIT_V3: no SIF mouse RPC in Off/Controller,
+	   menus, or NES. First resumed USB frame only drains stale motion. */
+	{
+		Bool bUsbGameplay =
+			(!_bMenu && _pSystem == _pSnes && !_MainLoop_BlackScreen &&
+			 InputSnesMouseGetMode() == INPUT_SNES_MOUSE_USB) ? TRUE : FALSE;
+		if (bUsbGameplay)
+			InputMousePollPostFrame(_UsbMouseGameplayWasActive ? TRUE : FALSE);
+		else if (_UsbMouseGameplayWasActive)
+			InputMouseClearSnapshot();
+		_UsbMouseGameplayWasActive = bUsbGameplay;
+	}
 
     PROF_LEAVE("Frame");
 

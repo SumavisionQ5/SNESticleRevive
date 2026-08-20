@@ -1,38 +1,92 @@
-# SNESticleRevive — 240p / Experimental Fork
+# SNESticle Aurora 1.0.0 - In development
 
-A fork of ReyFxck/SNESticleRevive focused on 240p CRTs, NES/InfoNES experiments, and my own hardware-specific quirks.
+**SNESticle Aurora** is a PlayStation 2 emulator fork maintained by **@itsveenee**.
 
-Changes that prove useful or broadly applicable will be pushed to the main version when appropriate, while **updates from the main version will always be merged back into this fork.**
+SNESticle Aurora is based on **SNESticle Revive by @ReyFxck (Thomas R.)**, whose work brought SNESticle back into active development, and ultimately on the original **SNESticle by Icer Addis**.
 
-**Any change made in this fork is also available to anyone** who wants to cherry-pick, pull, or otherwise incorporate it into the main version or any other fork as they see fit.
+**Huge thanks to @ReyFxck** for his work on SNESticle Revive and for providing the foundation from which Aurora was created. **Huge thanks to Icer Addis** for creating the original SNESticle and its codebase.
 
-Original project and credits belong to the respective authors. See LICENSE for licensing and attribution details. **HUGE thanks** to @ReyFxck for his effort put into bringing this emulator back to life!
+<!-- AURORA_QUICKNES_CREDIT -->
+NES emulation through **QuickNES** is based on the **QuickNES core originally by Shay Green**, with the libretro core maintained by **libretro contributors**. Aurora uses `itsveenee/QuickNES_Core` as a pinned Git submodule for its PS2 integration. See [THIRD_PARTY.md](THIRD_PARTY.md) and the license notices inside the QuickNES submodule.
 
-Keep in mind: this fork uses **AI-generated code** but it's always tested by me, and I'm a Human according to reCAPTCHA.
+SNESticle Aurora focuses on 240p CRT output, NES/QuickNES integration and experiments, real PS2 hardware, accuracy and compatibility improvements, and other hardware-specific or experimental ideas.
 
----
+**Any changes made in SNESticle Aurora are also available to anyone** who wants to cherry-pick, pull, or otherwise incorporate them into SNESticle Revive or any other fork as they see fit.
+
+Project lineage and attribution are documented in [CREDITS.md](CREDITS.md). See LICENSE and the third-party license files for licensing details.
+
+Keep in mind: this project uses **AI-generated code**, but the changes are tested by me, and I'm a Human according to reCAPTCHA.
+
+
+## Building from Git
+
+Clone SNESticle Aurora together with its pinned third-party cores:
+
+```bash
+git clone --recurse-submodules https://github.com/itsveenee/SNESticleAurora.git
+cd SNESticleAurora
+git submodule update --init --recursive
+make
+```
+
+If the repository was cloned without `--recurse-submodules`, run
+`git submodule update --init --recursive` afterwards.
+
+
+## What's new?
 
 **FEATURES ADDED:**
 
-* Fixes and improvements for the 240p display modes
-* "Dirty fix" for font rendering in 240p *(a better fix should be implemented in the future)*
+Emulation:
+
+* QuickNES for NES games
+* Support added for more NES mappers: 13, 16, 18, 27, 48, 64, 65, 67, 68, 72, 77, 80, 82, 92, 96, 99, 101, 105, 118, 119, 151, 153, 155, 157, 158, 159, 185, 188, 210, 216, and 552. Every licensed NES and Famicom game will boot now.
 * Changed SRAM and RAM initialization for both NES and SNES. This will fix all the very few games that rely on specific initial values to work properly.
+* Fixes and improvements for the 240p display modes, improved screen positioning and overscan settings for each system and graphical resolution/modes.
 * Turbo B/A for NES games
+* Turbo toggle (hold R2+ANY BUTTON) for SNES games
+* In-game soft reset (L2+SELECT)
+* SNES mouse emulation
+
+User interface:
+
+* Save SRAM to USB
+* Browse SRAM files
+* Confirmation prompt for saving and loading states
+* Faster UI navigation
+* Many options to enable emulation hacks and compatibility modes (exchange accuracy for performance or vice-versa)
+* Option to reload the emulator's .elf (very useful for upgrading and testing new builds)
+* ~Changed font from 80 characters to 40 characters, more readable in 240p.~ *(I'll enable this very soon)*
+
+*(**NOTE**: to find the options above, go to the Video Settings and change the pages with the circle button.)*
+
+Just for fun:
+
+* Famiclone audio option (swap duty cycles, a known hardware bug in some Famiclones you can intentionally turn on)
 * Region selector (to intentionally trigger region-lock screens) for SNES games
 * Select SRAM size (to intentionally trigger anti-piracy screens and measures) for SNES games
-* Browse SRAM files
-* In-game soft reset (L2+SELECT)
-* Famiclone audio option (swap duty cycles)
 
-*(**NOTE**: to find the options above, go to the Video Settings and change to page 2 with the circle button.)*
+
+**FIXED:**
+
+* Many graphical glitches and inaccuracies on many NES and SNES games
+* Pilotwings (SNES) mode 7 rendering, also fixes other games that rely on it
+
 
 **TO BE FIXED:**
 
-* Scrolling and graphical bugs in many NES games, specially Super Mario Bros. 3 and Gauntlet. *(I'm trying to fix the mappers by comparing their codes to codes from other emulators)*
-* Option to reload the .elf *(currently goes to the Memory Card browser)*
+* Super Mario World 2 (SNES) performance
+* Speedy Gonzales in Los Gatos Banditos (SNES) performance
+* Top Gear (SNES) performance
+* The Lost Vikings 1 and 2 (SNES) black screen
+* Addams Family (SNES) graphical glitches and timing issues
+* Sonic Blast Man (SNES) wrong colors
+* Any other games with performance or graphical issues
+
 
 **TO BE ADDED:**
 
-* Individual and improved screen positioning and overscan options for each system and graphical resolution/modes.
+* SA-1 Emulation
+* Improve Mode 7, FX1 and FX2 emulation
+* Famicom Disk System support
 * Other stupid (or not-so-stupid) ideas I might come up with. Thanks!
-

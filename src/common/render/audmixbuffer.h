@@ -17,6 +17,9 @@ class AudMixBuffer : public CMixBuffer
     Uint32  m_uSampleRate;
     Bool    m_bAsync;
     Uint32  m_uFrameSamplePhase;
+    /* AURORA_MEGA_V2_AUDIO_CLOCK_FIELDS */
+    Uint32  m_uFrameRateNum;
+    Uint32  m_uFrameRateDen;
 
 	Uint32	m_uLastOutput;
 
@@ -32,6 +35,16 @@ public:
         m_uSampleRate = uSampleRate;
         m_uFrameSamplePhase = 0;
     }
+    void SetFrameRateRational(Uint32 uNumerator, Uint32 uDenominator)
+    {
+        if (!uNumerator || !uDenominator) return;
+        if (m_uFrameRateNum != uNumerator || m_uFrameRateDen != uDenominator)
+        {
+            m_uFrameRateNum = uNumerator;
+            m_uFrameRateDen = uDenominator;
+            m_uFrameSamplePhase = 0;
+        }
+    }
 	Uint32 GetLastOutput() {return m_uLastOutput;}
     void Reset();
 
@@ -43,8 +56,8 @@ public:
 };
 
 
-/* Game (emulator) audio volume: 0..100, where 100 = the build's base gain.
-   Shared by SNES and NES (single _AudMix).  Exposed for the Video Config. */
+/* Game (emulator) audio gain: internal 0..400 percent, default 200.
+   Video Config displays internal/2 (0..200). Shared by SNES and NES. */
 #ifdef __cplusplus
 extern "C" {
 #endif

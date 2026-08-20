@@ -58,6 +58,10 @@ void GSK_SetOverscan(int percent);
 /* Toggle the PCRTC 16:9 presentation live (1 = on, 0 = 4:3). */
 void GSK_SetWidescreen(int on);
 
+/* NES/SNES 240p pixel-aspect correction. Keeps the 256-pixel framebuffer
+   untouched and changes only PCRTC horizontal magnification. */
+void GSK_SetNative240pPar(int on);
+
 /* Tear down and rebuild the GS for the current g_GskVideoMode. The caller
    MUST re-upload any textures it owns afterwards (e.g. FontInit). Intended
    to run once at boot after the saved settings are read from the card. */
@@ -67,6 +71,9 @@ void GSK_ReinitVideo(void);
    Differs from g_GskVideoMode after the settings are loaded but before
    GSK_ReinitVideo() runs. */
 int GSK_GetActiveVideoMode(void);
+
+/* AURORA_MEGA_V2_GS_REFRESH_DECL: exact presentation clock for audio pacing. */
+void GSK_GetRefreshRate(Uint32 *pNumerator, Uint32 *pDenominator);
 
 /* Returns the active gsKit global, or NULL if GSK_Init has not run. */
 struct gsGlobal *GSK_GetGlobal(void);
@@ -79,6 +86,19 @@ Uint32 GSK_VramAllocTBP(Uint32 nBytes);
    the GIF channel. Use this before the SNES blender kicks its own raw
    DMA chain on the GIF channel. */
 void GSK_DrainAndWait(void);
+
+/* AURORA_GS_RAWGIF_DRAIN_V1
+ * Bridge-only drain: submit gsKit and wait until GIF DMA has finished feeding
+ * the same path-3 channel, but do not wait for the GS FINISH token itself.
+ * Packet execution order is still preserved by the GIF. */
+void GSK_DrainForRawGif(void);
+
+/* AURORA_GS_PARTIAL_GAMEPLAY_CLEAR_V1
+ * Hint that the current frame will immediately receive the normal full-width,
+ * bottom-reaching gameplay texture blit. When enabled, GSK_ResetFrame limits
+ * its black clear to a conservative top strip and restores full scissor before
+ * subsequent primitives. Default/off keeps the historical full clear. */
+void GSK_SetGameplayFastClear(Bool enabled);
 
 /* Drain gsKit's draw queue and wait. Equivalent to GSK_DrainAndWait
    but kept as a separate name for clarity in the per-frame flush. */
