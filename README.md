@@ -4,136 +4,131 @@
 
 <p align="center" style="margin-top: 0;">
   <b><font size="7">
-    SNESticle Revive PlayStation 2<br>
-    Homebrew and S/NES emulator!
+    SNESticle 复活版 PlayStation 2<br>
+    自制程序与 S/NES 模拟器！
   </font></b>
 </p>
 
-Revived and actively-maintained source of **SNESticle**, the long-rumored
-**Super Nintendo (SNES) emulator** written by **Icer Addis (iaddis)**.
+**SNESticle** 的复活且积极维护的源代码，这是一个传闻已久的
+**超级任天堂（SNES）模拟器**，由 **Icer Addis (iaddis)** 编写。
 
-SNESticle was famously hidden inside the **GameCube** version of EA's
-**Fight Night Round 2 (2005)**, where it ran **Super Punch-Out!!**. The
-community reverse‑engineered and extracted that build in **2022**, and Sardu
-released the source under the **MIT license**. This repository keeps that code
-alive: reorganized into logical directories, fixed, extended, and made easy to
-build and study today.
+SNESticle 曾著名地隐藏在 EA 的 **《拳击之夜 2》（Fight Night Round 2，2005）** 的
+**GameCube** 版本中，在其中运行了 **《超级拳无虚发》**。社区在
+**2022 年** 对该版本进行了逆向工程并提取出来，Sardu 以 **MIT 许可证** 发布了源代码。此仓库让这份代码
+得以延续：重组为逻辑目录、修复、扩展，并且如今易于构建和研究。
 
-On top of the SNES core, the project now also integrates **InfoNES** to bring
-**NES** emulation to the **PlayStation 2**.
+在 SNES 核心之上，该项目现在还集成了 **InfoNES**，将
+**NES** 模拟带到了 **PlayStation 2** 上。
 
 ---
 
-## 📚 Table of Contents
+## 📚 目录
 
-- [⚠️ Notes](#️-notes)
-- [🚀 Features](#-features)
-- [🎮 Controls](#-controls)
-- [🖼 Cover Art](#-cover-art)
-- [🎵 Menu Music & Audio](#-menu-music--audio)
-- [💾 Storage & Devices](#-storage--devices)
-- [🔨 Building](#-building-playstation-2)
-- [📝 What's been done recently](#-whats-been-done-recently)
-- [🐞 Known issues](#-known-issues--still-missing)
-- [📂 Project layout](#-project-layout)
-- [❤️ Credits](#-credits)
-- [📜 License](#-license)
+- [⚠️ 注意事项](#️-注意事项)
+- [🚀 功能特性](#-功能特性)
+- [🎮 控制](#-控制)
+- [🖼 封面艺术](#-封面艺术)
+- [🎵 菜单音乐与音频](#-菜单音乐与音频)
+- [💾 存储与设备](#-存储与设备)
+- [🔨 构建](#-构建-playstation-2)
+- [📝 近期完成的工作](#-近期完成的工作)
+- [🐞 已知问题](#-已知问题--仍缺失)
+- [📂 项目布局](#-项目布局)
+- [❤️ 致谢](#-致谢)
+- [📜 许可证](#-许可证)
 
 ---
 
-## ⚠️ Notes
+## ⚠️ 注意事项
 
 > [!WARNING]
-> **Attention**
+> **注意**
 >
-> **Primary target:** **PlayStation 2** (EE/IOP, gsKit). Development is done on PS2SDK, and the add-on works on all devices that support the PS2SDK.
+> **主要目标：** **PlayStation 2**（EE/IOP，gsKit）。开发基于 PS2SDK 进行，该附加组件可在所有支持 PS2SDK 的设备上运行。
 >
-> There's no need to create ISOs in this version; only do so if you want to distribute them to the community.
+> 此版本无需创建 ISO；仅当您想向社区分发时才需要这么做。
 >
-> **Please don't remove the credits of Icer Addis (iaddis), the original creator of SNESticle, or my credits (ReyFxck), maintainer of SNESticle Revive, from the homebrew.**
+> **请不要从自制程序中移除 Icer Addis (iaddis)（SNESticle 的原始创建者）或我（ReyFxck，SNESticle Revive 的维护者）的致谢信息。**
 ---
-## 🚀 Features
+## 🚀 功能特性
 <details>
-<summary>🕹️ SNES Progress</summary>
+<summary>🕹️ SNES 进度</summary>
 
-**Systems**
-- **SNES** — the original SNESticle core (65816 ASM CPU, SPC700, PPU).
-- **NES** — via **InfoNES** (`src/nes/`), with audio wired to the PS2 audio path.
+**系统**
+- **SNES** — 原始的 SNESticle 核心（65816 汇编 CPU、SPC700、PPU）。
+- **NES** — 通过 **InfoNES**（`src/nes/`），音频接入 PS2 音频路径。
 
-**SNES special chips (coprocessors):**
-- **DSP‑1 / DSP‑1B** — Pilotwings, Super Mario Kart, etc. (`sndsp1`) — clean‑room
-- **DSP‑2** — Dungeon Master (`sndsp2`) — clean‑room
-- **DSP‑4** — Top Gear 3000 (`sndsp4` + `dsp4emu`), **HLE / self‑contained** (no
-  external files). The full track‑projection math is the **ZSNES** DSP‑4 HLE
-  (GPLv2, © ZSNES Team), ported here with attribution — which is why this fork
-  is now **GPLv2** (see [License](#license)).
-- **CX4** — Mega Man X2 / X3 (`sncx4`)
-- **OBC1** — Metal Combat (`snobc1`)
-- **S‑DD1** — Star Ocean, Street Fighter Alpha 2 (`snsdd1`)
-- **S‑RTC** — Daikaijuu Monogatari II (`snsrtc`)
+**SNES 特殊芯片（协处理器）：**
+- **DSP‑1 / DSP‑1B** — 飞行员之翼、超级马里奥赛车等。（`sndsp1`）— 净室实现
+- **DSP‑2** — 地下城主（`sndsp2`）— 净室实现
+- **DSP‑4** — 顶级赛车 3000（`sndsp4` + `dsp4emu`），**HLE / 独立**（无
+  外部文件）。完整的赛道投影数学来自 **ZSNES** DSP‑4 HLE
+  （GPLv2，© ZSNES 团队），已移植并注明出处——这也是此分支
+  现在采用 **GPLv2** 的原因（见 [许可证](#license)）。
+- **CX4** — 洛克人 X2 / X3（`sncx4`）
+- **OBC1** — 金属战斗（`snobc1`）
+- **S‑DD1** — 星之海洋、街头霸王 Alpha 2（`snsdd1`）
+- **S‑RTC** — 大怪兽物语 II（`snsrtc`）
 </details>
 <details>
-<summary>🎮 PS2 Progress</summary>
+<summary>🎮 PS2 进度</summary>
 
-**PlayStation 2 platform**
-- gsKit‑based video backend with a **Video Config** screen.
-- Two interlaced video modes: **480i** (default, universally compatible) and
-  **1080i** with a centred 4:3 viewport, plus screen offset, overscan and
-  widescreen. The former 240p/288p and 480p paths were removed to keep the GS
-  setup on the stable 640x480 interlaced framebuffer path.
-- Switchable SNES colour profiles: **Original** (default) and the emulator's
-  restored **Composite** YIQ calibration; the choice can be previewed live.
-- **Cover art** in the ROM browser — box art, title screens, gameplay snaps,
-  logos and manual extras from PNG files, decoded by **upng**. Libretro art can
-  be fetched automatically with `COVER=y`. See [Cover art](#-cover-art).
-- The ROM browser consumes each driver's directory records directly, avoids a
-  separate `stat`/disc seek per CDFS entry, and grows its list dynamically.
-  Directory types are read in the normalized `FIO_S_*` format returned by
-  iomanX, with a full-path probe only for drivers that return an unknown type.
-  Its embedded streaming CDFS driver removes PS2SDK's fixed 256-entry ISO
-  table. Folders are shown as `> NAME/`; the marker and final slash remain
-  visible while only a long middle name is truncated or scrolled.
-- Launching a plain, ZIP or GZ ROM uses bulk `fileXio` reads instead of small
-  stdio RPCs. The loader no longer opens every ROM twice or clears an unused
-  8 MiB buffer before parsing it, reducing launch latency on slow devices.
-- **Menu music** — tracker tunes (`.mod` / `.xm`) play in the ROM browser and
-  pause menu, with volume and synthesis‑rate controls. See
-  [Menu music & audio](#menu-music--audio).
-- Audio via **audsrv**, with separate **Game Volume** and **Menu Music**
-  controls in the Video Config screen. Its stop/resume state is explicit, so
-  menu and SNES audio no longer depend on opening a NES game after boot.
-- **SNES and NES cartridge save states** — five slots; USB, memory-card, MMCE
-  and internal-HDD storage; ROM and CRC validation; and two-bank writes that
-  preserve the previous valid state.
-- **Battery SRAM** — SNES and NES saves are separated under
-  `mc0:/SNESticle/SNES/` and `mc0:/SNESticle/NES/`; old SNES saves in the
-  v1.0.3 root layout are loaded and migrated without deleting the original.
-- Controller / memory‑card / IRX bring‑up aligned to **Open‑PS2‑Loader** style.
-- **Storage**: USB (×2), external HDD/SSD and **MX4SIO** SD cards as
-  `mass0:`/`mass1:`; the internal **HDD** (`hdd0:`); memory cards
-  (`mc0:`/`mc1:`) including **MMCE** carts (MemCard PRO 2 / SD2PSX) as
-  `mmce0:`/`mmce1:`. Reads FAT16/FAT32/**exFAT** with MBR/GPT partition
-  tables via the bundled BDM stack. See [Storage & devices](#storage--devices).
-- Netplay code (`src/modules/netplay/`).
+**PlayStation 2 平台**
+- 基于 gsKit 的视频后端，带有 **视频配置** 屏幕。
+- 两种隔行视频模式：**480i**（默认，普遍兼容）和
+  **1080i**，带有居中的 4:3 视口，以及屏幕偏移、过扫描和
+  宽屏。以前的 240p/288p 和 480p 路径已移除，以保持 GS
+  设置稳定在 640x480 隔行帧缓冲路径上。
+- 可切换的 SNES 颜色配置：**原始**（默认）以及模拟器
+  恢复的 **复合** YIQ 校准；可以实时预览选择。
+- ROM 浏览器中的 **封面艺术** —— 包装盒艺术、标题画面、游戏截图、
+  标志以及来自 PNG 文件的手动附加内容，由 **upng** 解码。Libretro 艺术
+  可以通过 `COVER=y` 自动获取。见 [封面艺术](#-封面艺术)。
+- ROM 浏览器直接使用每个驱动的目录记录，避免了
+  对每个 CDFS 条目单独进行 `stat`/光盘寻道，并动态增长列表。
+  目录类型以 iomanX 返回的标准化 `FIO_S_*` 格式读取，
+  仅对返回未知类型的驱动进行完整路径探测。
+  其嵌入式流式 CDFS 驱动移除了 PS2SDK 固定的 256 条目 ISO
+  表。文件夹显示为 `> NAME/`；标记和末尾斜杠保持
+  可见，只有很长的中间名称会被截断或滚动。
+- 启动普通、ZIP 或 GZ ROM 使用批量 `fileXio` 读取，而不是小的
+  stdio RPC。加载器不再每次打开 ROM 两次，也不会在解析前清除
+  一个未使用的 8 MiB 缓冲区，从而降低了慢速设备上的启动延迟。
+- **菜单音乐** —— 追踪器音乐（`.mod` / `.xm`）在 ROM 浏览器和
+  暂停菜单中播放，带有音量和合成速率控制。见
+  [菜单音乐与音频](#菜单音乐与音频)。
+- 通过 **audsrv** 播放音频，在视频配置屏幕中有单独的 **游戏音量** 和 **菜单音乐**
+  控制。其停止/恢复状态是显式的，因此
+  菜单和 SNES 音频不再依赖于启动后打开 NES 游戏。
+- **SNES 和 NES 卡带即时存档** —— 五个存档位；USB、记忆卡、MMCE
+  和内置 HDD 存储；ROM 和 CRC 校验；以及双银行写入，
+  保留之前有效的状态。
+- **电池 SRAM** —— SNES 和 NES 存档分别存放于
+  `mc0:/SNESticle/SNES/` 和 `mc0:/SNESticle/NES/`；v1.0.3 根布局中的旧 SNES 存档会被加载并迁移，而不会删除原始文件。
+- 控制器 / 记忆卡 / IRX 初始化流程与 **Open‑PS2‑Loader** 风格保持一致。
+- **存储**：USB（×2）、外置 HDD/SSD 和 **MX4SIO** SD 卡作为
+  `mass0:`/`mass1:`；内置 **HDD**（`hdd0:`）；记忆卡
+  （`mc0:`/`mc1:`），包括 **MMCE** 卡带（MemCard PRO 2 / SD2PSX）作为
+  `mmce0:`/`mmce1:`。通过捆绑的 BDM 栈读取 FAT16/FAT32/**exFAT**，支持 MBR/GPT 分区
+  表。见 [存储与设备](#存储与设备)。
+- 网络对战代码（`src/modules/netplay/`）。
 </details>
 
 ---
 
-## 🎮 Controls
+## 🎮 控制
 
-The PS2 pad maps to an SNES controller. **L2 + R2** (pressed together) toggles
-between the game and the menu at any time, flushing changed SRAM when the menu
-opens. The menu is displayed first; a pending SRAM write starts two rendered
-frames later and reports completion without the old fixed one-second pause.
+PS2 手柄映射到 SNES 控制器。**L2 + R2**（同时按下）可随时在
+游戏和菜单之间切换，打开菜单时会刷新更改过的 SRAM。菜单首先显示；待处理的 SRAM 写入在两个渲染帧后开始，并在完成时报告，不再有旧的固定一秒钟暂停。
 
 <details>
-<summary>🎮 In Game</summary>
+<summary>🎮 游戏中</summary>
 
-**In a game**
+**游戏中**
 
-| Button | SNES |
+| 按钮 | SNES |
 |:------:|------|
-| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> | D‑Pad |
+| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> | 方向键 |
 | <img src="docs/controls/cross.svg" height="20" alt="Cross"> | B |
 | <img src="docs/controls/circle.svg" height="20" alt="Circle"> | A |
 | <img src="docs/controls/square.svg" height="20" alt="Square"> | Y |
@@ -141,185 +136,173 @@ frames later and reports completion without the old fixed one-second pause.
 | <img src="docs/controls/l1.svg" height="20" alt="L1"> / <img src="docs/controls/r1.svg" height="20" alt="R1"> | L / R |
 | <img src="docs/controls/select.svg" height="20" alt="Select"> | Select |
 | <img src="docs/controls/start.svg" height="20" alt="Start"> | Start |
-| <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/cross.svg" height="20" alt="Cross"> | Save state to the current slot |
-| <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/circle.svg" height="20" alt="Circle"> | Load state from the current slot |
-| <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/r2.svg" height="20" alt="R2"> | Open the menu and flush changed SRAM |
+| <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/cross.svg" height="20" alt="Cross"> | 保存状态到当前存档位 |
+| <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/circle.svg" height="20" alt="Circle"> | 从当前存档位加载状态 |
+| <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/r2.svg" height="20" alt="R2"> | 打开菜单并刷新更改的 SRAM |
 
 </details>
 
 <details>
-<summary>📂 Menu & ROM Browser</summary>
+<summary>📂 菜单与 ROM 浏览器</summary>
 
-**Menu & ROM browser**
+**菜单与 ROM 浏览器**
 
-| Button | Action |
+| 按钮 | 操作 |
 |:------:|--------|
-| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> Up / Down | Move the selection |
-| <img src="docs/controls/cross.svg" height="20" alt="Cross"> or <img src="docs/controls/start.svg" height="20" alt="Start"> | Launch the highlighted ROM (or open a folder) |
-| <img src="docs/controls/triangle.svg" height="20" alt="Triangle"> | Go up one folder (`..`) |
-| <img src="docs/controls/square.svg" height="20" alt="Square"> | Page up — *or swap the cover image when cover art is on (see below)* |
-| <img src="docs/controls/circle.svg" height="20" alt="Circle"> | Page down |
-| <img src="docs/controls/select.svg" height="20" alt="Select"> | File menu (copy / paste / delete) |
-| <img src="docs/controls/l1.svg" height="20" alt="L1"> / <img src="docs/controls/r1.svg" height="20" alt="R1"> | Switch screen (Browser ⇆ State Manager ⇆ Network ⇆ Menu ⇆ Log ⇆ Video Config), including while a game is paused. |
-| <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/r2.svg" height="20" alt="R2"> | Return to the game |
+| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> 上 / 下 | 移动选择 |
+| <img src="docs/controls/cross.svg" height="20" alt="Cross"> 或 <img src="docs/controls/start.svg" height="20" alt="Start"> | 启动高亮的 ROM（或打开文件夹） |
+| <img src="docs/controls/triangle.svg" height="20" alt="Triangle"> | 返回上一级文件夹（`..`） |
+| <img src="docs/controls/square.svg" height="20" alt="Square"> | 上一页 —— *或者当封面艺术开启时切换封面图像（见下文）* |
+| <img src="docs/controls/circle.svg" height="20" alt="Circle"> | 下一页 |
+| <img src="docs/controls/select.svg" height="20" alt="Select"> | 文件菜单（复制 / 粘贴 / 删除） |
+| <img src="docs/controls/l1.svg" height="20" alt="L1"> / <img src="docs/controls/r1.svg" height="20" alt="R1"> | 切换屏幕（浏览器 ⇆ 状态管理器 ⇆ 网络 ⇆ 菜单 ⇆ 日志 ⇆ 视频配置），包括游戏暂停时。 |
+| <img src="docs/controls/l2.svg" height="20" alt="L2"> + <img src="docs/controls/r2.svg" height="20" alt="R2"> | 返回游戏 |
 
 </details>
 
 <details>
-<summary>💾 Save States</summary>
+<summary>💾 即时存档</summary>
 
-**Battery SRAM**
+**电池 SRAM**
 
-Cartridge battery saves use separate directories inside the emulator's PS2
-memory-card save: `mc0:/SNESticle/SNES/<game>.srm` and
-`mc0:/SNESticle/NES/<game>.srm`. NES SRAM is enabled only for iNES ROMs whose
-header contains the battery flag and stores the complete 8 KiB cartridge RAM.
-Opening the in-game menu with **L2 + R2** flushes changed SRAM.
-The UI no longer waits for the memory card before entering the menu: the write
-is deferred by two visible frames, while the menu-music I/O helper keeps an
-already-loaded track feeding `audsrv` during the synchronous card operation.
+卡带电池存档使用模拟器 PS2
+记忆卡存档中的独立目录：`mc0:/SNESticle/SNES/<game>.srm` 和
+`mc0:/SNESticle/NES/<game>.srm`。NES SRAM 仅对头部包含电池标志的 iNES ROM 启用，并存储完整的 8 KiB 卡带 RAM。
+使用 **L2 + R2** 打开游戏内菜单会刷新更改的 SRAM。
+UI 不再等待记忆卡后才进入菜单：写入
+延迟两个可见帧，而菜单音乐 I/O 辅助程序在同步卡操作期间保持
+已加载的曲目供给 `audsrv`。
 
-For backward compatibility, an SNES save missing from `SNES/` is looked up at
-the old `mc0:/SNESticle/<game>.srm` location. It is loaded normally and a copy
-is written into `SNES/` on the next SRAM save; the old file is never deleted.
+为了向后兼容，`SNES/` 中缺失的 SNES 存档会在
+旧的 `mc0:/SNESticle/<game>.srm` 位置查找。它会正常加载，并在下一次 SRAM 保存时将副本
+写入 `SNES/`；旧文件永远不会被删除。
 
-**First save-state destination**
+**首次即时存档目标**
 
-The first in-game **L2 + Cross** press opens a small, temporary **Save State
-Location** screen. Select **Auto**, **USB**, **Memory Card**, **MMCE**, or
-**Internal HDD** and press Cross: the target is remembered, the first state is
-saved, and the screen closes back to the game automatically. Press Circle to
-cancel. All five choices are always shown, so a removable device can be chosen
-as the future default even when it is not inserted during setup. Saving to a
-currently unavailable target reports a normal error instead of silently
-changing the preference.
+首次在游戏中按下 **L2 + Cross** 会打开一个小的临时 **即时存档位置**
+屏幕。选择 **自动**、**USB**、**记忆卡**、**MMCE** 或
+**内置 HDD** 并按 Cross：目标会被记住，第一个状态被
+保存，屏幕自动关闭返回游戏。按 Circle 取消。所有五个选项始终显示，因此可移动设备即使在设置时未插入，也可以被选为将来的默认目标。保存到
+当前不可用的目标会报告正常错误，而不是静默地
+更改偏好。
 
-Later **L2 + Cross** presses save directly and **L2 + Circle** loads directly.
-This temporary selector pauses without flushing SRAM; **L2 + R2** remains the
-dedicated menu/SRAM shortcut. The choice is stored in `state.cfg`. Existing
-`mc0:/SNESticle/state.cfg` and `mc1:` files retain priority; without a writable
-card the emulator can persist it beside a writable standalone ELF, then under
-`SNESticle/state.cfg` on `mass0:`/`mass1:`/legacy `mass:` (USB or MX4SIO) or
-an enabled MMCE slot. If a disc/ISO boot later opens a ROM from another local
-unit such as `mass2:` or an HDD partition, that ROM device is also used and its
-choice is recovered as soon as the ROM is opened. CDFS and SMB remain read-only
-and are never selected as configuration or state-write targets.
+之后的 **L2 + Cross** 按下直接保存，**L2 + Circle** 直接加载。
+这个临时选择器暂停时不会刷新 SRAM；**L2 + R2** 仍然是
+专用的菜单/SRAM 快捷键。选择存储在 `state.cfg` 中。现有的
+`mc0:/SNESticle/state.cfg` 和 `mc1:` 文件保留优先级；如果没有可写的
+卡，模拟器可以将其持久化在可写的独立 ELF 旁边，然后在
+`mass0:`/`mass1:`/旧版 `mass:`（USB 或 MX4SIO）或
+已启用的 MMCE 插槽上的 `SNESticle/state.cfg` 下。如果之后从光盘/ISO 启动并打开另一个本地单元（如 `mass2:` 或 HDD 分区）中的 ROM，那么该 ROM 设备也会被使用，并且其选择会在 ROM 打开后立即恢复。CDFS 和 SMB 保持只读，永远不会被选为配置或状态写入目标。
 
-**Auto** first tries the device that supplied the ROM, then the available
-`massN:`, `mc0:`/`mc1:` and enabled `mmce0:`/`mmce1:` devices. **USB** covers
-USB flash drives, external USB HDD/SSD and MX4SIO devices exposed as `massN:`.
-**Memory Card** tries both PS2 slots. **MMCE** tries both MMCE slots when MMCE
-support is enabled in Video Config. **Internal HDD** writes to the same mounted
-APA/PFS partition as the current ROM. It can be selected as a default at any
-time, but an actual HDD save requires the current ROM to have been opened from
-an enabled internal-HDD partition. Auto always uses quick-save slot 1; with
-only a PS2 memory card available it falls through to that card, preferring
-`mc0:`.
+**自动** 首先尝试提供 ROM 的设备，然后是可用的
+`massN:`、`mc0:`/`mc1:` 和已启用的 `mmce0:`/`mmce1:` 设备。**USB** 涵盖
+USB 闪存驱动器、外置 USB HDD/SSD 以及以 `massN:` 暴露的 MX4SIO 设备。
+**记忆卡** 尝试两个 PS2 插槽。**MMCE** 在视频配置中启用 MMCE
+支持时尝试两个 MMCE 插槽。**内置 HDD** 写入与当前 ROM 相同的已挂载
+APA/PFS 分区。它可以随时被选为默认值，但
+实际的 HDD 保存要求当前 ROM 是从
+已启用的内置 HDD 分区打开的。自动始终使用快速存档位 1；如果
+只有 PS2 记忆卡可用，它会回退到该卡，优先选择
+`mc0:`。
 
-If a selected PS2 memory card is present but unformatted, the emulator asks
-before formatting it. The safe **No / Cancel** option is selected by default,
-and the warning makes clear that formatting erases the entire card. The same
-confirmation is used when a changed SRAM needs the unformatted `mc0:` card.
+如果选定的 PS2 记忆卡存在但未格式化，模拟器会询问
+是否格式化。默认选中安全的 **否 / 取消** 选项，
+警告明确说明格式化会擦除整张卡。当更改的 SRAM 需要未格式化的 `mc0:` 卡时，也会使用相同的确认。
 
-**State Manager**
+**状态管理器**
 
-The regular L1/R1 tab is a file manager available both on the initial homebrew
-screens and while a game is paused:
+常规的 L1/R1 标签页是一个文件管理器，可在初始自制程序
+屏幕以及游戏暂停时使用：
 
-| Option | Action |
+| 选项 | 操作 |
 |--------|--------|
-| **Browse State Files** | Open the state folder for the selected storage device. The separate browser hides unrelated files; press Select to open the file menu and delete a state, or L1 to return. |
-| **Storage** | Cycle through `mass0:`, `mass1:`, the legacy `mass:` alias, `mc0:`, `mc1:`, enabled MMCE slots, and the enabled internal HDD. |
-| **Quick Slot** | Select quick-save slot 1–5 for an explicit device. Auto stays on slot 1. |
-| **Ask Save Location Again** | Forget the current target so the next L2 + Cross asks again. |
+| **浏览状态文件** | 打开所选存储设备的状态文件夹。单独的浏览器隐藏无关文件；按 Select 打开文件菜单并删除状态，或按 L1 返回。 |
+| **存储** | 循环切换 `mass0:`、`mass1:`、旧版 `mass:` 别名、`mc0:`、`mc1:`、已启用的 MMCE 插槽和已启用的内置 HDD。 |
+| **快速存档位** | 为显式设备选择快速存档位 1–5。自动保持在存档位 1。 |
+| **再次询问保存位置** | 忘记当前目标，以便下一次 L2 + Cross 再次询问。 |
 
-Internal-HDD management first opens its APA partition list; enter the desired
-partition and then `SNESticle/states`. Each slot has an `a` and a `b` bank;
-SNES uses `.sNa`/`.sNb` and NES uses `.nNa`/`.nNb`. Deleting either matching
-file from the state browser removes both banks automatically. On a PS2 memory
-card these banks remain directly in `mcN:/SNESticle/`, as before; the `SNES/`
-and `NES/` subdirectories are for SRAM only.
+内置 HDD 管理首先打开其 APA 分区列表；进入所需
+分区，然后进入 `SNESticle/states`。每个存档位有 `a` 和 `b` 两个银行；
+SNES 使用 `.sNa`/`.sNb`，NES 使用 `.nNa`/`.nNb`。从状态浏览器删除任一匹配
+文件会自动删除两个银行。在 PS2 记忆卡上，这些银行仍然直接位于 `mcN:/SNESticle/` 中，与之前一样；`SNES/`
+和 `NES/` 子目录仅用于 SRAM。
 
-Each slot keeps two banks. A new bank is committed only after its complete
-payload has been written, and every load checks the format version, ROM CRC,
-ROM size and payload CRC. If the newest bank is incomplete or corrupt, the
-older valid bank is used automatically. New banks use fast deflate compression
-and reuse the header scan without rereading the payload after a successful
-write, reducing slow device I/O; existing uncompressed version-1 banks remain
-loadable.
+每个存档位保留两个银行。新银行只有在完整
+负载写入之后才会被提交，并且每次加载都会检查格式版本、ROM CRC、
+ROM 大小和负载 CRC。如果最新的银行不完整或损坏，则会自动使用
+较旧的有效银行。新银行使用快速 deflate 压缩，
+并在成功写入后复用头部扫描而不重新读取负载，减少慢速设备 I/O；现有的未压缩版本 1 银行仍然可以加载。
 
-Save states cover **base SNES hardware** and **iNES cartridge games**. NES
-states preserve CPU, RAM, PPU, CHR RAM, pAPU, cartridge SRAM, active bank
-mappings, mapper RAM, mapper registers/latches and IRQ counters; bank mappings
-are stored as region/offset references instead of process pointers, so a state
-remains valid after restarting the emulator. FDS states are not supported.
+即时存档覆盖 **基础 SNES 硬件** 和 **iNES 卡带游戏**。NES
+状态保存 CPU、RAM、PPU、CHR RAM、pAPU、卡带 SRAM、活动银行
+映射、Mapper RAM、Mapper 寄存器/锁存器和 IRQ 计数器；银行映射
+存储为区域/偏移引用而不是进程指针，因此状态
+在模拟器重启后仍然有效。不支持 FDS 状态。
 
-SNES games using DSP, SuperFX, CX4, OBC1, S‑DD1, S‑RTC or Super Game Boy
-hardware are still rejected with an explicit message until those coprocessor
-states are serialized.
+使用 DSP、SuperFX、CX4、OBC1、S‑DD1、S‑RTC 或 Super Game Boy
+硬件的 SNES 游戏仍会被拒绝，并显示明确消息，直到这些协处理器
+状态被序列化。
 
 </details>
 
 <details>
-<summary>⚙️ Video Config</summary>
+<summary>⚙️ 视频配置</summary>
 
-**Video Config screen**
+**视频配置屏幕**
 
-| Button | Action |
+| 按钮 | 操作 |
 |:------:|--------|
-| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> Up / Down | Select an option |
-| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> Left / Right | Change its value |
-| <img src="docs/controls/square.svg" height="20" alt="Square"> | Reset the screen offset |
-| <img src="docs/controls/cross.svg" height="20" alt="Cross"> or <img src="docs/controls/start.svg" height="20" alt="Start"> | Save settings to the memory card |
+| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> 上 / 下 | 选择选项 |
+| <img src="docs/controls/dpad.svg" height="20" alt="D-Pad"> 左 / 右 | 更改其值 |
+| <img src="docs/controls/square.svg" height="20" alt="Square"> | 重置屏幕偏移 |
+| <img src="docs/controls/cross.svg" height="20" alt="Cross"> 或 <img src="docs/controls/start.svg" height="20" alt="Start"> | 将设置保存到记忆卡 |
 
 </details>
 
 ---
 
-## 🖼️ Cover art
+## 🖼️ 封面艺术
 
 <details>
-<summary>Show details</summary>
+<summary>显示详情</summary>
 
 
-The ROM browser can display box art, title screens, gameplay snapshots and
-logos next to the game list. Enable **Video Config → Cover Art**, then press ✕
-to save the setting. Only **one image is displayed at a time**; installing all
-four types makes them available for cycling rather than drawing four images
-simultaneously.
+ROM 浏览器可以在游戏列表旁边显示包装盒艺术、标题画面、游戏截图和
+标志。启用 **视频配置 → 封面艺术**，然后按 ✕
+保存设置。**一次只显示一张图像**；安装全部
+四种类型可让它们循环切换，而不是同时绘制四张图像。
 
-### 1. Most important rule: match the ROM name
+### 1. 最重要的规则：匹配 ROM 名称
 
-The PNG filename must match the ROM filename with only its final extension
-removed:
+PNG 文件名必须与 ROM 文件名匹配，仅移除其最终扩展名：
 
-| ROM | Required artwork filename |
+| ROM | 所需艺术作品文件名 |
 |-----|---------------------------|
 | `Super Mario World (USA).sfc` | `Super Mario World (USA).png` |
 | `Super Mario World (USA).zip` | `Super Mario World (USA).png` |
 | `Super Mario Bros. (World).nes` | `Super Mario Bros. (World).png` |
 
-Matching is case-insensitive, but every other part of the name matters. For
-example, a manually installed `Super Mario World (USA).png` does not match a
-ROM named `Super Mario World (U) [!].smc`.
+匹配不区分大小写，但名称的其他所有部分都很重要。例如，
+手动安装的 `Super Mario World (USA).png` 不会匹配名为
+`Super Mario World (U) [!].smc` 的 ROM。
 
-The project uses these artwork collections:
+该项目使用以下艺术作品收藏：
 
-- [Libretro — Super Nintendo / SNES](https://thumbnails.libretro.com/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/)
-- [Libretro — Nintendo Entertainment System / NES](https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/)
+- [Libretro — 超级任天堂 / SNES](https://thumbnails.libretro.com/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/)
+- [Libretro — 任天堂娱乐系统 / NES](https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/)
 
-Each collection contains four artwork types recognized by SNESticle Revive:
+每个收藏包含 SNESticle Revive 识别的四种艺术作品类型：
 
-| Directory | Artwork |
+| 目录 | 艺术作品 |
 |-----------|---------|
-| `Named_Boxarts/` | Game box or cover art |
-| `Named_Titles/` | Title screen |
-| `Named_Snaps/` | In-game screenshot |
-| `Named_Logos/` | Transparent game logo or icon |
+| `Named_Boxarts/` | 游戏包装盒或封面艺术 |
+| `Named_Titles/` | 标题画面 |
+| `Named_Snaps/` | 游戏内截图 |
+| `Named_Logos/` | 透明游戏标志或图标 |
 
-### 2. Two supported layouts
+### 2. 两种受支持的布局
 
-For a single image, place the PNG next to the ROM:
+对于单张图像，将 PNG 放在 ROM 旁边：
 
 ```text
 ROMS/
@@ -327,8 +310,8 @@ ROMS/
 └── Super Mario World (USA).png
 ```
 
-To use every artwork type for the same game, repeat the matching filename in
-all four directories:
+要对同一游戏使用每种艺术作品类型，在
+所有四个目录中重复匹配的文件名：
 
 ```text
 ROMS/
@@ -343,7 +326,7 @@ ROMS/
     └── Super Mario World (USA).png
 ```
 
-You can also add extra custom images in the ROM directory:
+您也可以在 ROM 目录中添加额外的自定义图像：
 
 ```text
 Super Mario World (USA)-1.png
@@ -352,66 +335,58 @@ Super Mario World (USA)-2.png
 Super Mario World (USA)-9.png
 ```
 
-In the browser, press **□** to cycle through available images in this order:
-PNG next to the ROM → box art → title screen → gameplay snap → logo → extras
-`-1` through `-9`. Missing types are skipped automatically.
+在浏览器中，按 **□** 按以下顺序循环切换可用图像：
+ROM 旁边的 PNG → 包装盒艺术 → 标题画面 → 游戏截图 → 标志 → 附加内容
+`-1` 到 `-9`。缺失的类型自动跳过。
 
-> Libretro replaces the characters ``&*/:`<>?"\|`` with `_` in thumbnail
-> filenames. When installing artwork manually, rename the downloaded PNG to
-> the exact base name of your ROM. The automatic downloader described below
-> handles this conversion for you.
+> Libretro 将缩略图文件名中的 ``&*/:`<>?"\|`` 替换为 `_`。
+> 手动安装艺术作品时，将下载的 PNG 重命名为
+> ROM 的准确基本名称。下面描述的自动下载器
+> 会为您处理此转换。
 
-### 3. USB, MX4SIO, MMCE, HDD, memory cards, SMB and CDFS
+### 3. USB、MX4SIO、MMCE、HDD、记忆卡、SMB 和 CDFS
 
-The directory layout is identical on every device; only the path prefix
-changes:
+目录布局在每个设备上完全相同；只有路径前缀
+不同：
 
-| Device | Example ROM directory |
+| 设备 | 示例 ROM 目录 |
 |--------|-----------------------|
-| USB drive, USB HDD/SSD or MX4SIO | `mass0:/ROMS/` or `mass1:/ROMS/` |
-| Standard memory card | `mc0:/ROMS/` or `mc1:/ROMS/` |
-| MemCard PRO 2 / SD2PSX (MMCE) | `mmce0:/ROMS/` or `mmce1:/ROMS/` |
-| Internal APA/PFS HDD | `hdd0:/PARTITION/ROMS/` |
-| Read-only network share | `smb:/ROMS/` |
-| Disc or ISO | `cdfs:/ROMS/` |
+| USB 驱动器、USB HDD/SSD 或 MX4SIO | `mass0:/ROMS/` 或 `mass1:/ROMS/` |
+| 标准记忆卡 | `mc0:/ROMS/` 或 `mc1:/ROMS/` |
+| MemCard PRO 2 / SD2PSX (MMCE) | `mmce0:/ROMS/` 或 `mmce1:/ROMS/` |
+| 内置 APA/PFS HDD | `hdd0:/PARTITION/ROMS/` |
+| 只读网络共享 | `smb:/ROMS/` |
+| 光盘或 ISO | `cdfs:/ROMS/` |
 
-For USB, HDD, MMCE, memory cards or SMB, copy the ROM and the `Named_*`
-directories to the device/share using the layout shown above. The browser
-indexes the PNG files when entering the directory, avoiding a slow storage
-scan on every selection change. See [SMB ROM loading](#smb-rom-loading-replaces-host)
-for the required `SMB.CNF` and server settings.
+对于 USB、HDD、MMCE、记忆卡或 SMB，使用上面显示的布局将 ROM 和 `Named_*`
+目录复制到设备/共享。浏览器在进入目录时会索引 PNG 文件，避免每次选择更改时进行缓慢的存储扫描。有关所需的 `SMB.CNF` 和服务器设置，请参阅 [SMB ROM 加载](#smb-rom-loading-replaces-host)。
 
-`make covers` and `COVER=y` also generate a small `COVERS.IDX` beside the
-ROMs. It lets CDFS and other slow devices load one sequential index instead of
-enumerating all four artwork directories. `COVERS.IDX` and the `Named_*`
-directories are hidden from the game list. Manual layouts without an index
-still work through the compatible directory-scan fallback.
+`make covers` 和 `COVER=y` 还会在 ROM 旁边生成一个小的 `COVERS.IDX`。它让 CDFS 和其他慢速设备加载一个顺序索引，而不是枚举所有四个艺术作品目录。`COVERS.IDX` 和 `Named_*`
+目录会从游戏列表中隐藏。没有索引的手动布局
+仍然通过兼容的目录扫描回退工作。
 
-For **CDFS**, first prepare a normal directory on the computer and pass it to
-the Makefile. All existing PNG files and subdirectories are preserved under
-`cdfs:/ROMS/`:
+对于 **CDFS**，首先在计算机上准备一个普通目录，并将其传递给
+Makefile。所有现有的 PNG 文件和子目录都会保留在
+`cdfs:/ROMS/` 下：
 
 ```bash
 make iso ROMS=/path/to/ROMS OUT=/path/to/output
 ```
 
-Another option is a shared `covers/` directory next to the ELF. It can contain
-plain PNG files and/or the four `Named_*` directories. To compile with a
-different shared path, use:
+另一个选项是 ELF 旁边共享的 `covers/` 目录。它可以包含
+普通 PNG 文件和/或四个 `Named_*` 目录。要使用不同的共享路径编译，请使用：
 
 ```bash
 make clean
 make COVERS_PATH=mass:/SNESticle/covers
 ```
 
-The shared path is searched first. The ROM directory and `covers/` next to the
-ELF remain available as fallback locations.
+共享路径首先被搜索。ROM 目录和 ELF 旁边的 `covers/`
+仍然作为回退位置可用。
 
-### 4. Automatic download with `COVER=y`
+### 4. 使用 `COVER=y` 自动下载
 
-When building an ISO, `COVER=y` (or `cover=y`) detects SNES/NES games from the
-ROM extension, inspects `.zip` contents when possible and searches Libretro
-for all four artwork types:
+构建 ISO 时，`COVER=y`（或 `cover=y`）根据 ROM 扩展名检测 SNES/NES 游戏，尽可能检查 `.zip` 内容，并在 Libretro 中搜索所有四种艺术作品类型：
 
 ```bash
 make iso \
@@ -420,219 +395,185 @@ make iso \
   COVER=y
 ```
 
-- `COVER=n` is the default: it never accesses the network.
-- Matching tries the exact name, Libretro's `_` character replacement, names
-  without trailing tags and common region aliases such as `(U)` → `(USA)`.
-- Existing valid artwork is never downloaded again or overwritten.
-- Unknown ROMs and games without a match are reported and skipped; ISO
-  creation continues.
-- PNG files are added only to the temporary ISO tree. The original ROM bytes
-  are never changed.
-- A compact `COVERS.IDX` is generated automatically to reduce pauses while
-  browsing artwork, especially on CDFS.
-- Use `COVER_SYSTEM=snes` or `COVER_SYSTEM=nes` to force a system when a `.zip`
-  cannot be identified automatically. `COVER_JOBS=6` controls the number of
-  parallel downloads.
+- `COVER=n` 是默认值：从不访问网络。
+- 匹配尝试精确名称、Libretro 的 `_` 字符替换、没有尾部标签的名称以及常见的区域别名，如 `(U)` → `(USA)`。
+- 现有有效的艺术作品永远不会再次下载或覆盖。
+- 未知 ROM 和没有匹配项的游戏会被报告并跳过；ISO
+  创建继续。
+- PNG 文件仅添加到临时 ISO 树中。原始 ROM 字节
+  永远不会被更改。
+- 自动生成紧凑的 `COVERS.IDX` 以减少浏览艺术作品时的暂停，
+  尤其是在 CDFS 上。
+- 使用 `COVER_SYSTEM=snes` 或 `COVER_SYSTEM=nes` 在无法自动识别 `.zip` 时强制指定系统。`COVER_JOBS=6` 控制并行下载的数量。
 
-To prepare a directory for any other device without creating an ISO:
+要为任何其他设备准备目录而不创建 ISO：
 
 ```bash
 make covers ROMS=/path/to/ROMS
 ```
 
-This command creates `Named_Boxarts`, `Named_Titles`, `Named_Snaps` and
-`Named_Logos` inside each directory containing ROMs. It adds PNG files only;
-ROMs are not renamed, opened for writing or modified. Run it again after
-manually adding or removing artwork to refresh `COVERS.IDX`, or delete only
-`COVERS.IDX` to make the emulator scan the directories itself.
+此命令在每个包含 ROM 的目录内创建 `Named_Boxarts`、`Named_Titles`、`Named_Snaps` 和
+`Named_Logos`。它仅添加 PNG 文件；
+ROM 不会被重命名、打开写入或修改。在手动添加或移除艺术作品后再次运行它
+以刷新 `COVERS.IDX`，或者仅删除
+`COVERS.IDX` 让模拟器自行扫描目录。
 
-**Supported formats:** 8-bit or 16-bit RGB/RGBA PNG, grayscale PNG and
-1/2/4/8-bit palette/indexed PNG. **Adam7 interlacing is not supported** and is
-rejected automatically by the downloader. For manually prepared artwork, save
-without interlacing and prefer images around 256 px to reduce memory use and
-decoding time.
+**支持的格式：** 8 位或 16 位 RGB/RGBA PNG、灰度 PNG 和
+1/2/4/8 位调色板/索引 PNG。**不支持 Adam7 隔行扫描**，会被下载器自动拒绝。对于手动准备的艺术作品，保存时不要使用隔行扫描，并优先选择大约 256 px 的图像以减少内存使用和解码时间。
 
 </details>
 
 ---
 
-## 🎵 Menu music & audio
+## 🎵 菜单音乐与音频
 
 <details>
-<summary>Show details</summary>
+<summary>显示详情</summary>
 
 
-Background music plays in the ROM browser and the pause menu — tracker modules
-in **`.mod`** (Amiga ProTracker) and **`.xm`** (FastTracker II) formats, decoded
-on the EE by the bundled official [**libxmp-lite 4.7.2**](https://github.com/libxmp/libxmp/releases/tag/libxmp-4.7.2)
-source. It applies the
-original ProTracker/FastTracker effect, tempo, instrument and loop rules and
-includes the upstream fixes made after the old 4.5.0 PS2 fork, including a
-channel-unmute regression that could make notes disappear. Classic MODs also
-set the upstream-recommended default pan to 50 before loading; this keeps
-hard-left/right instruments audible through imperfect HDMI/TV mono downmix.
-This setting affects menu tracker music only, not SNES or NES game audio.
+ROM 浏览器和暂停菜单中播放背景音乐 —— 追踪器模块
+格式为 **`.mod`**（Amiga ProTracker）和 **`.xm`**（FastTracker II），由捆绑的官方 [**libxmp-lite 4.7.2**](https://github.com/libxmp/libxmp/releases/tag/libxmp-4.7.2)
+源代码在 EE 上解码。它应用
+原始的 ProTracker/FastTracker 效果、节奏、乐器和循环规则，并
+包含旧 4.5.0 PS2 分支之后的上游修复，包括一个可能导致音符消失的通道取消静音回归。经典 MOD 还会在加载前设置上游推荐的默认声像为 50；这可以防止
+硬左/右声道的乐器在不完美的 HDMI/TV 单声道下混中听不见。
+此设置仅影响菜单追踪器音乐，不影响 SNES 或 NES 游戏音频。
 
-Drop one or more tracks in any of these folders. Memory-card and mass-storage
-folders are indexed immediately; enabled MMCE/HDD sources are checked once
-through their own device probes. CD/DVD is checked a little later with
-non-blocking readiness polls so booting an ISO cannot stall while the drive is
-still detecting the disc. Subfolders are supported (up to four levels), and
-the resulting index is cached:
+将一个或多个曲目放入以下任一文件夹。记忆卡和大容量存储
+文件夹会立即索引；已启用的 MMCE/HDD 源通过它们自己的设备探测检查一次。CD/DVD 稍后使用非阻塞就绪轮询检查，因此在驱动器仍在检测光盘时启动 ISO 不会卡住。支持子文件夹（最多四级），
+并且生成的索引会被缓存：
 
-- the `BGM_PATH` folder (if you built with one — see below)
-- `mc0:/SNESticle/bgm`, `mc1:/SNESticle/bgm`
-- `mmce0:/SNESticle/bgm`, `mmce0:/bgm`
-- `mmce1:/SNESticle/bgm`, `mmce1:/bgm`
-- `mass:/SNESticle/bgm`, `mass:/bgm`
-- the first enabled internal-HDD APA/PFS partition containing
-  `SNESticle/bgm` or `bgm` (for example `hdd0:/+OPL/SNESticle/bgm`)
-- `cdfs:/BGM` (inside the ISO)
+- `BGM_PATH` 文件夹（如果您在构建时指定了一个 —— 见下文）
+- `mc0:/SNESticle/bgm`、`mc1:/SNESticle/bgm`
+- `mmce0:/SNESticle/bgm`、`mmce0:/bgm`
+- `mmce1:/SNESticle/bgm`、`mmce1:/bgm`
+- `mass:/SNESticle/bgm`、`mass:/bgm`
+- 第一个包含 `SNESticle/bgm` 或 `bgm` 的已启用内置 HDD APA/PFS 分区
+  （例如 `hdd0:/+OPL/SNESticle/bgm`）
+- `cdfs:/BGM`（ISO 内）
 
-MMCE folders are scanned only while **MMCE Cards** is enabled and only on
-ports which answer the hardware PING. Enabling MMCE in Video Config triggers a
-one-time scan during the current session, so reopening the homebrew is not
-required to discover its tracks.
+MMCE 文件夹仅在 **MMCE Cards** 启用且仅在响应硬件 PING 的端口上扫描。在视频配置中启用 MMCE 会在当前会话期间触发一次性扫描，因此无需重新打开自制程序即可发现其曲目。
 
-Internal-HDD folders are scanned only while **HDD Support** is enabled. The
-driver remains off by default; once enabled, the player enumerates the main PFS
-partitions and stops at the first one containing tracks. Playlist entries keep
-their full `hdd0:/PARTITION/...` identity, so opening another HDD partition in
-the browser does not break the next track.
+内置 HDD 文件夹仅在 **HDD Support** 启用时扫描。该驱动默认关闭；一旦启用，播放器会枚举主 PFS 分区并停在第一个包含曲目的分区。播放列表条目保留其完整的 `hdd0:/PARTITION/...` 身份，因此在浏览器中打开另一个 HDD 分区不会破坏下一首曲目。
 
-A **random track** is picked at boot, and a **different one each time you leave
-a game** and return to the menu (when more than one track is present).
+启动时会随机选择 **一首曲目**，并且每次离开游戏返回菜单时（当存在多首曲目时）选择 **另一首不同的曲目**。
 
-**Video Config → Audio**
+**视频配置 → 音频**
 
-| Option | Range | Notes |
+| 选项 | 范围 | 说明 |
 |--------|-------|-------|
-| **Game Volume** | 0–100 | Loudness of the emulated SNES/NES audio. **100 = the default** (matches Snes9x); 0 mutes. Applies to both cores. |
-| **Menu Music** | Off / 1–100 | Background‑music volume. **0 = Off** — the player isn't loaded and uses no RAM. Shows **Searching** while CD/DVD detection is pending, then **No Track** only when no playable `.mod`/`.xm` is found. |
-| **Frequency** | 16–48 kHz | Synthesis rate of the menu music (the output is always resampled to 48 kHz). Higher = better quality but more CPU; **24 kHz** is the default and safest setting for a steady frame rate. |
+| **游戏音量** | 0–100 | 模拟 SNES/NES 音频的响度。**100 = 默认**（匹配 Snes9x）；0 静音。适用于两个核心。 |
+| **菜单音乐** | 关闭 / 1–100 | 背景音乐音量。**0 = 关闭** —— 播放器未加载且不使用 RAM。在等待 CD/DVD 检测时显示 **搜索中**，仅当未找到可播放的 `.mod`/`.xm` 时显示 **无曲目**。 |
+| **频率** | 16–48 kHz | 菜单音乐的合成速率（输出始终重采样到 48 kHz）。越高音质越好但 CPU 占用更多；**24 kHz** 是默认值，也是稳定帧率的最安全设置。 |
 
-Menu-side filesystem calls on the PS2 are synchronous. While the browser is
-enumerating a large folder, a cover is being read/decoded, a settings file is
-being written, or SMB is connecting, a small EE helper thread services only
-the already-loaded tracker and `audsrv`; it never opens or scans a filesystem
-itself. Modal messages also continue updating the player. The helper sleeps
-completely outside those I/O scopes, including during gameplay. Changing the
-synthesis frequency restarts the loaded libxmp player in memory instead of
-re-reading the module from disk.
+PS2 上菜单侧的文件系统调用是同步的。当浏览器正在枚举大文件夹、读取/解码封面、写入设置文件或 SMB 正在连接时，一个小型 EE 辅助线程仅为已加载的追踪器和 `audsrv` 提供服务；它本身从不打开或扫描文件系统。模态消息也会继续更新播放器。辅助线程在这些 I/O 范围之外完全休眠，包括游戏期间。更改合成频率会在内存中重启已加载的 libxmp 播放器，而不是从磁盘重新读取模块。
 
-All three persist to the memory card (press ✕ to save), and work the same for
-SNES and NES (the menu and audio path are shared).
+这三项设置都会持久化到记忆卡（按 ✕ 保存），并且对 SNES 和 NES 工作方式相同（菜单和音频路径是共享的）。
 
-To bake a default tracks folder or synth rate into the build:
+要在构建中固化默认曲目文件夹或合成速率：
 
 ```bash
-make BGM_PATH=mass:/snes/bgm    # where to look for .mod/.xm first
+make BGM_PATH=mass:/snes/bgm    # 首先在哪里查找 .mod/.xm
 make BGM_PATH=hdd0:/+OPL/SNESticle/bgm
 make BGM_RATE=24000             # 16000/22050/24000/32000/38000/44100/48000
 ```
 
-When building an ISO, add `bgm=` (or `BGM=`) to bundle a folder of tracks (they
-land in `cdfs:/BGM`). The build stops with an error if that folder contains no
-`.mod`/`.xm`, which prevents accidentally producing a music-less ISO:
+构建 ISO 时，添加 `bgm=`（或 `BGM=`）来捆绑一个曲目文件夹（它们会
+放入 `cdfs:/BGM`）。如果该文件夹不包含
+`.mod`/`.xm`，构建会报错停止，从而防止意外生成无音乐的 ISO：
 
 ```bash
 make iso roms=/path/to/roms bgm=/path/to/tracks
 ```
 
-> **License:** `libxmp-lite` is MIT licensed. The vendored source, license and
-> exact PS2-port revision are under `src/third_party/libxmp-lite/`.
+> **许可证：** `libxmp-lite` 采用 MIT 许可。供应商源代码、许可证和
+> 确切的 PS2 移植版本位于 `src/third_party/libxmp-lite/` 下。
 
 </details>
 
 ---
 
-## 💾 Storage & devices
+## 💾 存储与设备
 
 <details>
-<summary>Show details</summary>
+<summary>显示详情</summary>
 
 
-The ROM browser lists local devices immediately. Optional hardware and network
-sources are enabled in **Video Config → Storage / Devices** and initialized
-only when selected, so a missing HDD, MMCE card, network cable or DHCP server
-cannot stall normal boot.
+ROM 浏览器立即列出本地设备。可选硬件和网络
+源在 **视频配置 → 存储 / 设备** 中启用，并且仅在
+被选中时初始化，因此缺少 HDD、MMCE 卡、网线或 DHCP 服务器
+不会拖慢正常启动。
 
-| Device | What it is |
+| 设备 | 是什么 |
 |--------|------------|
-| `mass0:` / `mass1:` | **USB** (the PS2's two ports), USB **external HDD/SSD**, and **MX4SIO** SD cards — all block devices share the `massN:` namespace, numbered in detection order. |
-| `hdd0:` | The **internal HDD** (PS2 Fat expansion bay), APA‑partitioned like HDD‑OSD / OPL. |
-| `mc0:` / `mc1:` | **Memory cards** — including the original **MemCard PRO** (gen 1), which behaves as a normal card. |
-| `mmce0:` / `mmce1:` | **MMCE** carts (**MemCard PRO 2**, **SD2PSX**) via `mmceman`. |
-| `cdfs:` | The game/data disc (or the ISO this ELF was burned into). |
-| `smb:` | One configured **read-only SMB network share** used for browsing and loading ROMs. |
+| `mass0:` / `mass1:` | **USB**（PS2 的两个端口）、USB **外置 HDD/SSD** 和 **MX4SIO** SD 卡 —— 所有块设备共享 `massN:` 命名空间，按检测顺序编号。 |
+| `hdd0:` | **内置 HDD**（PS2 Fat 扩展槽），像 HDD‑OSD / OPL 一样进行 APA 分区。 |
+| `mc0:` / `mc1:` | **记忆卡** —— 包括原始 **MemCard PRO**（第一代），其行为如同普通卡。 |
+| `mmce0:` / `mmce1:` | **MMCE** 卡带（**MemCard PRO 2**、**SD2PSX**），通过 `mmceman`。 |
+| `cdfs:` | 游戏/数据光盘（或此 ELF 被刻录进的 ISO）。 |
+| `smb:` | 一个配置好的 **只读 SMB 网络共享**，用于浏览和加载 ROM。 |
 
-**Filesystems / partitions:** the bundled **BDM** stack (`bdm` + `bdmfs_fatfs` +
-`usbmass_bd`) reads **FAT16 / FAT32 / exFAT** with **MBR or GPT** partition
-tables (so drives larger than 2 TB work), mirroring modern OPL. The internal
-HDD additionally uses `ps2atad` + `ps2hdd` for the APA `hdd0:` device.
+**文件系统 / 分区：** 捆绑的 **BDM** 栈（`bdm` + `bdmfs_fatfs` +
+`usbmass_bd`）读取 **FAT16 / FAT32 / exFAT**，支持 **MBR 或 GPT** 分区
+表（因此大于 2 TB 的驱动器也可以工作），与现代化 OPL 一致。内置
+HDD 另外使用 `ps2atad` + `ps2hdd` 来访问 APA `hdd0:` 设备。
 
-### SMB ROM loading (replaces `host:`)
+### SMB ROM 加载（替代 `host:`）
 
-The original iaddis `host:` entry was a development bridge for
-**ps2link/ps2client HostFS**. It let the author load ROMs and IRX files from a
-PC while developing, but it was never a normal network share. Its behaviour
-depends on the launcher or emulator supplying HostFS; some implementations
-return unreliable type metadata and make regular files appear as directories.
-For that reason `host:` is no longer shown in the user ROM browser. The
-internal direct-ELF/ps2link boot fallback remains available for developers.
+原始的 iaddis `host:` 条目是用于
+**ps2link/ps2client HostFS** 的开发桥梁。它让作者在开发时从 PC 加载 ROM 和 IRX 文件，但它从来不是一个普通的网络共享。其行为取决于启动器或模拟器提供的 HostFS；某些实现返回不可靠的类型元数据，使常规文件显示为目录。
+因此 `host:` 不再显示在用户 ROM 浏览器中。内部的直接 ELF/ps2link 启动回退仍然可供开发人员使用。
 
-SNESticle now embeds PS2SDK's `smbman` and exposes one configured share as
-`smb:`. Network modules, DHCP and login start only when you explicitly connect
-or select `smb:`; merely booting or opening the setup tab does not touch DEV9.
+SNESticle 现在嵌入 PS2SDK 的 `smbman` 并将一个配置好的共享暴露为
+`smb:`。网络模块、DHCP 和登录仅当您明确连接
+或选择 `smb:` 时才启动；仅仅启动或打开设置选项卡不会触及 DEV9。
 
-#### NetherSX2 2.2n+ DEV9 setup
+#### NetherSX2 2.2n+ DEV9 设置
 
-In the screenshot where **API** and **Device** show **Not Set / Não definido**,
-the virtual PS2 has no network link and SNESticle SMB cannot reach DHCP or the
-server. In NetherSX2 open **App Settings → Settings → System → Networking** and
-use:
+在 **API** 和 **Device** 显示 **Not Set / Não definido** 的截图中，
+虚拟 PS2 没有网络链路，SNESticle SMB 无法访问 DHCP 或
+服务器。在 NetherSX2 中打开 **App Settings → Settings → System → Networking** 并使用：
 
-| NetherSX2 setting | Value for a normal home network |
+| NetherSX2 设置 | 普通家庭网络的值 |
 |--------------------|---------------------------------|
-| **Enable DEV9 Ethernet** | On |
+| **启用 DEV9 以太网** | 开 |
 | **API** | `Sockets` |
-| **Device** | `WiFi` when the Android device and SMB PC/NAS are on the same Wi-Fi/LAN; use `VPN` only when the phone routes the connection through a VPN, or the appropriate `SIM DATA` option for mobile data. |
-| **DNS1 / DNS2 Mode** | `Auto (Default)` |
+| **Device** | 当 Android 设备和 SMB PC/NAS 在同一 Wi-Fi/LAN 上时使用 `WiFi`；仅当手机通过 VPN 路由连接时使用 `VPN`，或者为移动数据使用相应的 `SIM DATA` 选项。 |
+| **DNS1 / DNS2 模式** | `Auto (Default)` |
 | **DNS1 / DNS2** | `0.0.0.0 (Default)` |
 
-Manual DNS presets in that screen are intended for PS2 online-game servers;
-SNESticle uses the numeric **Server IP** entered in its SMB Network tab and
-does not need one. After applying the settings, fully restart the emulated PS2,
-then configure **Server IP**, **Share**, user/password and port inside
-SNESticle. The [official NetherSX2 2.2n release instructions](https://github.com/Trixarian/NetherSX2-patch/releases/tag/2.2n)
-document the same DEV9 `Sockets` and device selection.
+该屏幕中的手动 DNS 预设是为 PS2 在线游戏服务器准备的；
+SNESticle 使用其 SMB 网络选项卡中输入的数值 **服务器 IP**，不需要这些。应用设置后，完全重启模拟的 PS2，
+然后在 SNESticle 中配置 **服务器 IP**、**共享**、用户/密码和端口。
+[官方 NetherSX2 2.2n 发布说明](https://github.com/Trixarian/NetherSX2-patch/releases/tag/2.2n)
+记录了相同的 DEV9 `Sockets` 和设备选择。
 
-#### Recommended: configure it on the PS2
+#### 推荐：在 PS2 上配置
 
-Use L1/R1 to open the **SMB Network** tab (the former Host screen), then set:
+使用 L1/R1 打开 **SMB 网络** 选项卡（原 Host 屏幕），然后设置：
 
-| Field | Meaning |
+| 字段 | 含义 |
 |-------|---------|
-| **Server IP** | Numeric IPv4 address of the PC/NAS. Press Cross, choose an octet with Left/Right, and change it with Up/Down. |
-| **Port** | Cross or Left/Right switches between the usual ports 445 and 139. |
-| **Share** | Share name only, such as `roms`; it is not a local filesystem path. |
-| **Username** | SMB account, or `GUEST` for a guest share. |
-| **Password** | Leave empty for guest access. It is masked on screen. |
+| **服务器 IP** | PC/NAS 的数值 IPv4 地址。按 Cross，用左/右选择一个八位组，用上/下更改它。 |
+| **端口** | Cross 或左/右在常用端口 445 和 139 之间切换。 |
+| **共享** | 仅共享名称，例如 `roms`；它不是本地文件系统路径。 |
+| **用户名** | SMB 账户，或 `GUEST` 用于访客共享。 |
+| **密码** | 访客访问留空。屏幕上会掩码显示。 |
 
-For Share/Username/Password, press Cross to edit, Left/Right to move the
-cursor, Up/Down to choose a character, Cross to advance/add, Square to delete,
-and Triangle to finish. Select **Save & Connect** when done. The emulator
-automatically validates and writes `mc0:/SNESticle/SMB.CNF` (falling back to
-`mc1:`). If neither card is writable, it tries the writable ELF directory,
-`mass0:`/`mass1:`/legacy `mass:` (USB or MX4SIO), then enabled and detected
-`mmce0:`/`mmce1:` storage. An ELF launched from an internal-HDD PFS partition
-can save beside itself as well. It then enables SMB and attempts the
-connection. The exact saved path and a specific connection error are shown on
-screen. Circle reloads the saved file.
+对于共享/用户名/密码，按 Cross 编辑，左/右移动
+光标，上/下选择字符，Cross 前进/添加，Square 删除，
+Triangle 完成。完成后选择 **保存并连接**。模拟器
+自动验证并写入 `mc0:/SNESticle/SMB.CNF`（回退到
+`mc1:`）。如果两张卡都不可写，它会尝试可写的 ELF 目录、
+`mass0:`/`mass1:`/旧版 `mass:`（USB 或 MX4SIO），然后是已启用且检测到的
+`mmce0:`/`mmce1:` 存储。从内置 HDD PFS 分区启动的 ELF
+也可以在其旁边保存。然后启用 SMB 并尝试
+连接。屏幕上会显示确切的保存路径和具体的连接错误。
+Circle 重新加载保存的文件。
 
-#### Advanced: create `SMB.CNF` manually
+#### 高级：手动创建 `SMB.CNF`
 
-You can instead copy and edit [`SMB.CNF.example`](SMB.CNF.example):
+您可以复制并编辑 [`SMB.CNF.example`](SMB.CNF.example)：
 
 ```ini
 SERVER_IP=192.168.1.100
@@ -643,47 +584,37 @@ PASSWORD=
 PASSWORD_TYPE=-1
 ```
 
-`SERVER_IP` must be a numeric IPv4 address. `SHARE` is the share name, not a
-filesystem path. Password modes are `-1` for guest/no password, `0` for legacy
-plaintext and `1` to hash the supplied password locally before authentication.
-If a non-empty password is supplied without `PASSWORD_TYPE`, mode `1` is used.
-The compatible wLaunchELF names `smbServer_IP`, `smbServer_Port`,
-`smbUsername`, `smbPassword`, `smbPasswordType` and `smbShare` are also
-accepted.
+`SERVER_IP` 必须是数值 IPv4 地址。`SHARE` 是共享名称，不是
+文件系统路径。密码模式：`-1` 表示访客/无密码，`0` 表示旧版
+明文，`1` 表示在认证前本地哈希提供的密码。
+如果提供了非空密码但没有 `PASSWORD_TYPE`，则使用模式 `1`。
+兼容的 wLaunchELF 名称 `smbServer_IP`、`smbServer_Port`、
+`smbUsername`、`smbPassword`、`smbPasswordType` 和 `smbShare` 也被
+接受。
 
-Manual files are searched in this order:
+手动文件按以下顺序搜索：
 
-- `mc0:/SNESticle/SMB.CNF` or `mc1:/SNESticle/SMB.CNF`;
-- beside a writable standalone ELF;
-- `mass0:/SNESticle/SMB.CNF`, `mass1:/SNESticle/SMB.CNF`, then the legacy
-  `mass:/SNESticle/SMB.CNF` alias when Mass/USB or MX4SIO support is enabled;
-- `mmce0:/SNESticle/SMB.CNF` or `mmce1:/SNESticle/SMB.CNF` for enabled MMCE
-  slots that answer the hardware probe;
-- the compatible shared `mc0:/SYS-CONF/SMB.CNF` or
-  `mc1:/SYS-CONF/SMB.CNF` fallback;
-- the root of a disc/ISO as `cdfs:/SMB.CNF`.
+- `mc0:/SNESticle/SMB.CNF` 或 `mc1:/SNESticle/SMB.CNF`；
+- 可写的独立 ELF 旁边；
+- `mass0:/SNESticle/SMB.CNF`、`mass1:/SNESticle/SMB.CNF`，然后在启用 Mass/USB 或 MX4SIO 支持时的旧版
+  `mass:/SNESticle/SMB.CNF` 别名；
+- 对响应硬件探测的已启用 MMCE 插槽使用 `mmce0:/SNESticle/SMB.CNF` 或 `mmce1:/SNESticle/SMB.CNF`；
+- 兼容的共享 `mc0:/SYS-CONF/SMB.CNF` 或
+  `mc1:/SYS-CONF/SMB.CNF` 回退；
+- 光盘/ISO 根目录作为 `cdfs:/SMB.CNF`。
 
-The on-console setup updates the writable file it loaded, or creates only an
-emulator-owned `SNESticle/SMB.CNF` fallback. It never overwrites a shared
-wLaunchELF file under `SYS-CONF`. Emulator-owned files on local storage take
-priority over shared/read-only bundled files, so changing a server does not
-require rebuilding the ISO.
+主机上的设置会更新其加载的可写文件，或者仅创建模拟器拥有的 `SNESticle/SMB.CNF` 回退。它永远不会覆盖 `SYS-CONF` 下共享的 wLaunchELF 文件。本地存储上模拟器拥有的文件优先于共享/只读捆绑文件，因此更改服务器不需要重新构建 ISO。
 
-For an ISO build, it can be copied to the root automatically:
+对于 ISO 构建，可以自动将其复制到根目录：
 
 ```bash
 make iso ROMS=/path/to/roms SMB_CONFIG=/path/to/SMB.CNF
 ```
 
-For a manual file, enable **Video Config → SMB (Network)**, save with Cross and
-open `smb:` in the browser. The **Save & Connect** action in the SMB Network
-tab enables that option automatically. Statuses such as **No SMB.CNF**,
-**DHCP Timeout**, **Auth Error** or **Share Error** identify a failed stage.
+对于手动文件，启用 **视频配置 → SMB（网络）**，用 Cross 保存并在浏览器中打开 `smb:`。SMB 网络选项卡中的 **保存并连接** 操作会自动启用该选项。**无 SMB.CNF**、**DHCP 超时**、**认证错误** 或 **共享错误** 等状态可识别失败的阶段。
 
-The browser deliberately disables copy, paste and delete on `smb:`. ROMs,
-ZIPs and their PNG artwork are read from the share; SRAM and save states still
-go to the configured local memory-card/USB destination. Configure the server
-share itself as read-only too. A minimal Samba share is:
+浏览器故意在 `smb:` 上禁用复制、粘贴和删除。ROM、ZIP 及其 PNG 艺术作品从共享中读取；SRAM 和即时存档仍
+保存到配置的本地记忆卡/USB 目标。也将服务器共享本身配置为只读。一个最小的 Samba 共享是：
 
 ```ini
 [roms]
@@ -693,295 +624,245 @@ share itself as read-only too. A minimal Samba share is:
     guest ok = yes
 ```
 
-> `smbman` implements **SMB1/NT1**, not SMB2/3. If the server requires it,
-> `server min protocol = NT1` is a global Samba setting. SMB1 is obsolete and
-> unsafe on an untrusted network: use a dedicated read-only share on an
-> isolated/trusted LAN and never expose it to the internet. An emulator also
-> needs working DEV9/SMAP Ethernet emulation; providing HostFS alone is not
-> enough.
+> `smbman` 实现 **SMB1/NT1**，而非 SMB2/3。如果服务器需要，
+> `server min protocol = NT1` 是 Samba 的全局设置。SMB1 已过时，在不可信网络上不安全：请在隔离/可信的局域网上使用专用的只读共享，切勿暴露到互联网。模拟器还需要正常工作的 DEV9/SMAP 以太网仿真；仅提供 HostFS 是不够的。
 
-> **Build note:** the complete USB group (`usbd_mini`, `bdm`,
-> `bdmfs_fatfs`, `usbmass_bd`) and SIO2 group (`sio2man`, memory-card,
-> pad/multitap, MMCE and MX4SIO) are pinned under [`irx/`](irx/). A build no
-> longer changes USB behaviour according to whichever PS2SDK happens to be
-> installed. USB uses the FreeUsbd-based `usbd_mini` selected by OPL for its
-> BDM loader; the browser also retries a selected `massN:` for up to three
-> seconds while a slow drive finishes mounting. Internal-HDD modules remain
-> supplied by PS2SDK because they are loaded only when HDD support is enabled.
-> MMCE slots are listed only after a successful hardware PING.
+> **构建说明：** 完整的 USB 组（`usbd_mini`、`bdm`、
+> `bdmfs_fatfs`、`usbmass_bd`）和 SIO2 组（`sio2man`、记忆卡、
+> pad/multitap、MMCE 和 MX4SIO）被固定在 [`irx/`](irx/) 下。构建不再
+> 根据安装的 PS2SDK 不同而改变 USB 行为。USB 使用 OPL 为其 BDM 加载器选择的基于 FreeUsbd 的 `usbd_mini`；浏览器还会在慢速驱动器完成挂载时最多重试选定的 `massN:` 三秒钟。内置 HDD 模块仍由 PS2SDK 提供，因为仅在启用 HDD 支持时才加载。
+> MMCE 插槽仅在硬件 PING 成功后列出。
 >
-> MMCE and MX4SIO both hook SIO2 and are therefore mutually exclusive. Turning
-> one on turns the other setting off. If the opposite driver is already
-> resident, Video Config shows **Restart** and applies the change safely on the
-> next boot.
+> MMCE 和 MX4SIO 都挂接 SIO2，因此互斥。打开
+> 一个会关闭另一个设置。如果相反的驱动已经
+> 驻留，视频配置会显示 **重启**，并在下次启动时安全地应用更改。
 >
-> Each storage module prints its load result on the boot splash
-> (`bdm.irx = 0`, `hdd (hdd0:) = N`, …), so a failure is visible in a photo of
-> the screen. On a console without an internal HDD the `dev9`/`hdd` probe just
-> reports "no hardware" and boot continues — it does not hang.
+> 每个存储模块在启动画面上打印其加载结果
+> （`bdm.irx = 0`、`hdd (hdd0:) = N`、……），因此失败在屏幕照片中可见。
+> 在没有内置 HDD 的主机上，`dev9`/`hdd` 探测只会
+> 报告“无硬件”并继续启动——不会挂起。
 
 </details>
 
 ---
 
-## 🔨 Building (PlayStation 2)
+## 🔨 构建（PlayStation 2）
 
 <details>
-<summary>Show details</summary>
+<summary>显示详情</summary>
 
 
-You need **PS2SDK** installed. Follow the
-[ps2dev](https://github.com/ps2dev/ps2dev.git) instructions and use the
-**latest** PS2SDK.
+您需要安装 **PS2SDK**。按照
+[ps2dev](https://github.com/ps2dev/ps2dev.git) 的说明并使用
+**最新** 的 PS2SDK。
 
 ```bash
 cd ~/SNESticleRevive
 
-# Just build the ELF
-make                 # single worker
-make JOBS=3          # parallel build (3 workers)
+# 仅构建 ELF
+make                 # 单工作线程
+make JOBS=3          # 并行构建（3 个工作线程）
 
-# Build a bootable ISO with a ROM folder and copy everything out
+# 使用 ROM 文件夹构建可启动 ISO 并复制所有内容
 make iso ROMS=/path/to/roms OUT=/path/to/output JOBS=3
 
-# See every option
+# 查看所有选项
 make help
 
-# Clean build folder
+# 清理构建文件夹
 make clean
 ```
 
-Produces `SNESticle.elf` (and a packed ELF / ISO for the `iso` target).
+生成 `SNESticle.elf`（以及 `iso` 目标对应的打包 ELF / ISO）。
 
-### Handy build flags
+### 方便的构建标志
 
-| Flag | What it does |
+| 标志 | 作用 |
 |------|--------------|
-| `JOBS=N` | Number of parallel compile workers (also honored by `make iso`). |
-| `VERBOSE=1` | Show the **full** warning/error text (no truncation). |
-| `PROFILE=1` | Compile the on‑screen profiler in — press **R3** in‑game to capture one frame's per‑section timing. |
-| `OUT=/path` | Copy the final ELF/ISO to this folder. |
-| `ROMS=/path` | ROM folder to embed when building an ISO. |
-| `COVER=y` / `cover=y` | Download matching Libretro boxart/title/snap/logo into the ISO; `n` is the offline default. |
-| `COVER_SYSTEM=auto` | Detect SNES/NES automatically; use `snes` or `nes` to override ambiguous archives. |
-| `COVER_JOBS=6` | Number of parallel thumbnail downloads. |
-| `PACK=0` | Build the ISO using the unpacked ELF. |
-| `COVERS_PATH=path` | Shared cover‑art folder baked into the build (e.g. `mass:/snes/covers`). See [Cover art](#-cover-art). |
-| `BGM_PATH=path` | Folder scanned first for menu‑music `.mod`/`.xm` files. See [Menu music & audio](#menu-music--audio). |
-| `BGM_RATE=hz` | Default menu‑music synthesis rate (e.g. `32000`). |
-| `SMB_CONFIG=/path/SMB.CNF` | Copy a single-share SMB configuration into an ISO root without printing its credentials. |
+| `JOBS=N` | 并行编译工作线程数（`make iso` 也支持）。 |
+| `VERBOSE=1` | 显示 **完整** 的警告/错误文本（不截断）。 |
+| `PROFILE=1` | 编译进屏幕上的性能分析器 —— 在游戏中按 **R3** 捕获一帧的每段计时。 |
+| `OUT=/path` | 将最终 ELF/ISO 复制到此文件夹。 |
+| `ROMS=/path` | 构建 ISO 时要嵌入的 ROM 文件夹。 |
+| `COVER=y` / `cover=y` | 下载匹配的 Libretro 包装盒艺术/标题/截图/标志到 ISO 中；`n` 是离线默认值。 |
+| `COVER_SYSTEM=auto` | 自动检测 SNES/NES；使用 `snes` 或 `nes` 覆盖模糊的压缩包。 |
+| `COVER_JOBS=6` | 并行缩略图下载数。 |
+| `PACK=0` | 使用未打包的 ELF 构建 ISO。 |
+| `COVERS_PATH=path` | 固化到构建中的共享封面艺术文件夹（例如 `mass:/snes/covers`）。见 [封面艺术](#-封面艺术)。 |
+| `BGM_PATH=path` | 首先扫描菜单音乐 `.mod`/`.xm` 文件的文件夹。见 [菜单音乐与音频](#菜单音乐与音频)。 |
+| `BGM_RATE=hz` | 默认菜单音乐合成速率（例如 `32000`）。 |
+| `SMB_CONFIG=/path/SMB.CNF` | 将单共享 SMB 配置复制到 ISO 根目录，而不打印其凭据。 |
 
-> Note: changing a flag like `PROFILE=1` does **not** force a recompile on its
-> own (make only tracks file timestamps). Run `make clean` first when toggling
-> compile flags.
-
-</details>
-
----
-
-## 📝 What's been done recently
-
-<details>
-<summary>Show details</summary>
-
-
-The cumulative notes for the current test version are available in
-[`CHANGELOG_v1.0.4.md`](CHANGELOG_v1.0.4.md).
-
-
-- **Coprocessors**: added DSP‑1, DSP‑2, CX4, OBC1, S‑DD1 and S‑RTC, each
-  written clean‑room and verified bit‑exact host‑side against public references.
-  **DSP‑4** (Top Gear 3000) is **HLE / self‑contained** (no external files): the
-  bus protocol plus the full track‑projection math come from the **ZSNES** DSP‑4
-  HLE (GPLv2, © ZSNES Team — zsKnight, _Demo_, pagefault, Nach), ported with
-  attribution. Incorporating that GPLv2 code is why the project was relicensed
-  from MIT to **GPLv2**.
-- **NES (InfoNES) integration**: full PS2 platform layer (render, input, audio,
-  one‑frame stepper). The five base 2A03 channels now use Shay Green's
-  cycle-timed **Nes_Snd_Emu + Blip_Buffer** at 32 kHz, and video uses Mesen2's
-  default NTSC 2C02 palette instead of the old saturated RGB555 table.
-- **Video**: gsKit migration, the Video Config screen, multiple modes, and a
-  **safe 480i default** (native 256x240 stays available for CRT users).
-- **Cover art**: the ROM browser shows custom images plus Libretro boxart,
-  title screens, gameplay snaps and logos from PNG files, with `-1` through
-  `-9` manual extras. Decoded covers are cached and neighbours prefetched, so
-  browsing stays smooth even from a CD. `make iso ... COVER=y` fetches all
-  matching art into CDFS without touching the source ROMs; `make covers
-  ROMS=...` prepares the same `Named_*` layout for any other device.
-- **ROM browser**: switched CDFS, USB, memory cards, SMB, MMCE and PFS/HDD to
-  direct directory records, eliminating the per-file `stat` round trip that
-  made large CDFS folders especially slow. iomanX-normalized `FIO_S_*` mode
-  bits identify directories consistently on every device; entries from unusual
-  third-party drivers that report no type are checked by full path. A streaming
-  fork of PS2SDK's CDFS driver removes its fixed 256-entry ISO table, the EE
-  entry array grows on demand, and the list/teal footer have separate geometry
-  so long directories never overwrite the status text.
-- **Menu music & audio controls**: tracker music (`.mod` / `.xm`) plays in the
-  ROM browser and pause menu via the PS2 port of **libxmp-lite**, decoded on the
-  EE and continuously resampled to the SPU2's 48 kHz. Added **Game Volume**,
-  **Menu Music** volume (0 = off, frees its RAM) and a synthesis **Frequency**
-  picker in Video Config — all persisted, shared by SNES and NES. A random
-  track plays at boot; returning from a game resumes the loaded decoder without
-  a disk reload, and the playlist advances when a track completes. A sleeping
-  EE helper prevents directory, cover, settings and SMB I/O from starving the
-  menu stream.
-- **Storage**: a pinned **BDM** stack with OPL's FreeUsbd-based `usbd_mini`
-  replaces the old single‑USB path — two USB ports, external HDD/SSD and
-  MX4SIO all appear as `mass0:`/`mass1:`, reading FAT16/FAT32/exFAT with
-  MBR/GPT. Slow USB media receives a bounded mount retry. Added the internal
-  HDD (`hdd0:`, APA) and MMCE carts (`mmce0:`/`mmce1:`, MemCard PRO 2 / SD2PSX).
-  The unreliable user-facing `host:` device was replaced by a lazy, read-only
-  `smb:` ROM share with bounded DHCP/login errors and correct file types.
-  See [Storage & devices](#storage--devices).
-- **Boot / input**: controller and IRX bring‑up reworked to behave on real
-  hardware, not just emulators. Direct ELF boot also tolerates launchers that
-  omit the executable path instead of crashing before video initialization.
-- **Save states**: restored the dormant iaddis-era feature as a release menu
-  with five slots, USB/memory-card selection, versioned files, ROM/CRC checks
-  and power-loss-safe two-bank writes; v1.0.4 also serializes the NES CPU, PPU,
-  pAPU, CHR RAM and complete mapper-private state.
-- **Build system**: parallel jobs, `VERBOSE`, `PROFILE`, friendlier `make help`,
-  and ISO builds that honor `JOBS`.
-- **Bug fixes**: C++17 / build warnings cleaned up, plus three real
-  out‑of‑bounds bugs fixed in the InfoNES core (`APU_Reg`, mapper 19 & 45 arrays)
-  and a sequence‑point UB fixed in the 6502 core.
+> 注意：更改像 `PROFILE=1` 这样的标志本身**不会**强制重新编译
+> （make 只跟踪文件时间戳）。切换编译标志时，请先运行 `make clean`。
 
 </details>
 
 ---
 
-## 🐞 Known issues / still missing
+## 📝 近期完成的工作
 
 <details>
-<summary>Show details</summary>
+<summary>显示详情</summary>
+
+
+当前测试版本的累积说明可在
+[`CHANGELOG_v1.0.4.md`](CHANGELOG_v1.0.4.md) 中找到。
+
+
+- **协处理器**：添加了 DSP‑1、DSP‑2、CX4、OBC1、S‑DD1 和 S‑RTC，每个
+  均为净室编写，并在主机端针对公共参考进行了位精确验证。
+  **DSP‑4**（顶级赛车 3000）是 **HLE / 独立**（无外部文件）：总线协议加上完整的赛道投影数学来自 **ZSNES** DSP‑4
+  HLE（GPLv2，© ZSNES 团队 — zsKnight、_Demo_、pagefault、Nach），已移植并注明出处。纳入 GPLv2 代码正是该项目从 MIT 重新授权为 **GPLv2** 的原因。
+- **NES (InfoNES) 集成**：完整的 PS2 平台层（渲染、输入、音频、
+  单帧步进器）。五个基础 2A03 通道现在使用 Shay Green 的
+  周期定时 **Nes_Snd_Emu + Blip_Buffer**，频率为 32 kHz，视频使用 Mesen2 的
+  默认 NTSC 2C02 调色板，而不是旧的饱和 RGB555 表。
+- **视频**：迁移到 gsKit，新增视频配置屏幕、多种模式，以及
+  **安全的 480i 默认值**（原生 256x240 仍可供 CRT 用户使用）。
+- **封面艺术**：ROM 浏览器显示自定义图像以及来自 PNG 文件的 Libretro 包装盒艺术、
+  标题画面、游戏截图和标志，以及 `-1` 到
+  `-9` 的手动附加内容。解码后的封面被缓存，邻近项被预取，因此
+  即使从 CD 浏览也能保持流畅。`make iso ... COVER=y` 获取所有
+  匹配的艺术到 CDFS 中，而不触及源 ROM；`make covers
+  ROMS=...` 为任何其他设备准备相同的 `Named_*` 布局。
+- **ROM 浏览器**：将 CDFS、USB、记忆卡、SMB、MMCE 和 PFS/HDD 切换到
+  直接目录记录，消除了逐文件 `stat` 往返，这
+  使得大型 CDFS 文件夹尤其缓慢。iomanX 标准化的 `FIO_S_*` 模式
+  位可在每个设备上一致地识别目录；来自不寻常
+  第三方驱动且不报告类型的条目通过完整路径检查。PS2SDK 的 CDFS 驱动的一个流式分支移除了其固定的 256 条目 ISO 表，EE 条目数组按需增长，并且列表/青绿色页脚具有独立的几何结构，因此长目录永远不会覆盖状态文本。
+- **菜单音乐与音频控制**：追踪器音乐（`.mod` / `.xm`）通过 **libxmp-lite** 的 PS2 移植在
+  ROM 浏览器和暂停菜单中播放，在 EE 上解码并持续重采样到 SPU2 的 48 kHz。添加了 **游戏音量**、
+  **菜单音乐** 音量（0 = 关闭，释放其 RAM）以及视频配置中的合成 **频率**
+  选择器 —— 全部持久化，SNES 和 NES 共享。启动时随机播放一首曲目；从游戏返回时恢复已加载的解码器而无需重新加载磁盘，并且播放列表在曲目完成时前进。一个休眠的 EE 辅助程序防止目录、封面、设置和 SMB I/O 饿死菜单流。
+- **存储**：固定的 **BDM** 栈搭配 OPL 基于 FreeUsbd 的 `usbd_mini`
+  取代了旧的单 USB 路径 —— 两个 USB 端口、外置 HDD/SSD 和
+  MX4SIO 都以 `mass0:`/`mass1:` 出现，读取 FAT16/FAT32/exFAT，支持
+  MBR/GPT。慢速 USB 介质获得有界的挂载重试。添加了内置
+  HDD（`hdd0:`，APA）和 MMCE 卡带（`mmce0:`/`mmce1:`，MemCard PRO 2 / SD2PSX）。
+  不可靠的面向用户的 `host:` 设备被一个惰性、只读的 `smb:` ROM 共享取代，具有有界的 DHCP/登录错误和正确的文件类型。
+  参见 [存储与设备](#存储与设备)。
+- **启动 / 输入**：控制器和 IRX 初始化重做，以在真实
+  硬件上表现正常，而不仅仅是在模拟器中。直接 ELF 启动也能容忍省略可执行路径的启动器，而不是在视频初始化前崩溃。
+- **即时存档**：恢复了休眠的 iaddis 时代功能，作为发布菜单
+  提供五个存档位、USB/记忆卡选择、版本化文件、ROM/CRC 检查
+  和断电安全的双银行写入；v1.0.4 还序列化了 NES CPU、PPU、
+  pAPU、CHR RAM 和完整的 mapper 私有状态。
+- **构建系统**：并行任务、`VERBOSE`、`PROFILE`、更友好的 `make help`，
+  以及支持 `JOBS` 的 ISO 构建。
+- **错误修复**：清理了 C++17 / 构建警告，修复了 InfoNES 核心中的三个真实的越界错误（`APU_Reg`、mapper 19 和 45 数组）
+  以及 6502 核心中的一个序列点未定义行为。
+
+</details>
+
+---
+
+## 🐞 已知问题 / 仍缺失
+
+<details>
+<summary>显示详情</summary>
 
 
 **SNES**
-- Save states currently support base-hardware games only; coprocessor games
-  are blocked until each extra chip has complete serialization.
-- **Final Fight 2** — correcting the rectangular OBSEL 6/7 sizes was necessary
-  but did not fix the reported gameplay scene by itself. r17 removes a GIF-DMA
-  race that let the GS read a scanline while the CPU reused its source buffer,
-  preserves DMA mode phase across a 64 KiB bank wrap and aligns mirrored OBJ
-  tile-fetch order with the 34-tile hardware limit. r18 additionally fixes the
-  65816's 24-bit bus wrap after official vectors exposed indexed reads past
-  `$FF:FFFF` landing in an empty page. OAM/VRAM burst paths and the CPU wrap
-  have host coverage. r19 audits every 65816 opcode in emulation/native mode,
-  fixes stack/direct-page/decimal/interrupt corner cases and aligns DMA/HDMA
-  timing with MesenCE/Mesen2. The original scene still needs a PS2/NetherSX2 retest
-  before it is considered fixed.
-- **First Samurai / Final Fight 3** — r20 replaces the old low/high-pair
-  approximation for `$210D-$2114` with the S-PPU's separate horizontal,
-  shared H/V and Mode 7 latches. The r21 deep capture then exposed the direct
-  cause of First Samurai's mosaic: mode-4 MDMA queued `$2116/$2117` address
-  writes but applied `$2118/$2119` data immediately, so tile words landed at a
-  stale VRAM address. MDMA PPU-port writes now retain transfer order and have a
-  focused host regression test. The affected scenes still require a
-  PS2/NetherSX2 visual retest before being marked fixed.
-- **Wild Guns** — r19 implements the documented 24-clock NMI delay after MDMA
-  and corrects the HDMA state machine/mode 5. The full-screen flicker reported
-  after character selection still needs confirmation on the same NetherSX2
-  setup before the issue is marked fixed.
-- Some large / special‑chip titles may still freeze or misbehave.
-- **SuperFX (GSU)** is experimental in v1.0.4: r15 corrects cache-window
-  rotation, executable RAM banks `$60-$7F`, byte MMIO and the hot loop, but
-  Star Fox/Yoshi and other boards still need game-by-game PS2 validation.
-- **Missing chip**: SA‑1 is not implemented.
+- 即时存档目前仅支持基础硬件游戏；协处理器游戏
+  会被阻止，直到每个额外芯片都有完整的序列化。
+- **Final Fight 2** —— 修正矩形 OBSEL 6/7 尺寸是必要的
+  但并未单独修复报告的游戏场景。r17 移除了 GIF-DMA 竞争，该竞争让 GS 在 CPU 重用其源缓冲区时读取扫描线，在 64 KiB 银行回绕时保留 DMA 模式相位，并将镜像 OBJ 瓦片获取顺序与 34 瓦片硬件限制对齐。r18 另外修复了 65816 的 24 位总线回绕，此前官方向量暴露了超过 `$FF:FFFF` 的索引读取落入空页。OAM/VRAM 突发路径和 CPU 回绕具有主机覆盖率。r19 审计了仿真/原生模式下的每个 65816 操作码，修复了堆栈/直接页/十进制/中断边界情况，并将 DMA/HDMA 时序与 MesenCE/Mesen2 对齐。原始场景仍需要 PS2/NetherSX2 重新测试才能被视为已修复。
+- **First Samurai / Final Fight 3** —— r20 用 S-PPU 单独的横向、
+  共享 H/V 和 Mode 7 锁存器替换了旧的 `$210D-$2114` 低/高对近似。r21 深度捕获随后暴露了 First Samurai 马赛克的直接原因：模式 4 MDMA 将 `$2116/$2117` 地址写入排队，但立即应用了 `$2118/$2119` 数据，因此瓦片字落到了陈旧的 VRAM 地址。MDMA PPU 端口写入现在保留传输顺序，并有一个聚焦的主机回归测试。受影响的场景在标记为已修复之前仍需要 PS2/NetherSX2 视觉重新测试。
+- **Wild Guns** —— r19 实现了 MDMA 后文档记录的 24 时钟 NMI 延迟，并纠正了 HDMA 状态机/模式 5。角色选择后报告的整个屏幕闪烁在问题标记为已修复之前仍需要在相同的 NetherSX2 设置上确认。
+- 一些大型 / 特殊芯片游戏可能仍然冻结或行为异常。
+- **SuperFX (GSU)** 在 v1.0.4 中是实验性的：r15 纠正了缓存窗口旋转、可执行 RAM 银行 `$60-$7F`、字节 MMIO 和热循环，但 Star Fox/Yoshi 和其他板卡仍需要逐游戏 PS2 验证。
+- **缺失芯片**：SA‑1 未实现。
 
 **NES (InfoNES)**
-- Save states currently cover `.nes` cartridges; FDS state serialization is
-  not available.
-- **Performance**: heavy scenes can push a frame over the 16.6 ms budget, which
-  vsync then locks to **30 fps**; this also knocks audio and per‑scanline
-  effects out of sync. (Use `PROFILE=1` + R3 to locate hotspots.)
-- **Super Mario Bros 3** — the MMC3 status‑bar split can glitch when scrolling
-  (InfoNES uses a scanline‑approximated MMC3 IRQ, not A12‑accurate).
-- The five base 2A03 channels are implemented. Expansion audio used by some
-  Japanese/mapper-specific releases (VRC6, VRC7, MMC5, FDS and Sunsoft 5B) is
-  not yet connected, so those releases can still miss instruments.
+- 即时存档目前涵盖 `.nes` 卡带；FDS 状态序列化
+  不可用。
+- **性能**：繁重场景可能使一帧超出 16.6 ms 预算，vsync
+  随后锁定到 **30 fps**；这也会使音频和每扫描线
+  效果不同步。（使用 `PROFILE=1` + R3 定位热点。）
+- **Super Mario Bros 3** —— 滚动时 MMC3 状态栏分割可能出现故障
+  （InfoNES 使用扫描线近似 MMC3 IRQ，而非 A12 精确）。
+- 五个基础 2A03 通道已实现。一些日本/特定 mapper 版本使用的扩展音频（VRC6、VRC7、MMC5、FDS 和 Sunsoft 5B）尚未连接，因此这些版本仍可能缺少乐器。
 
-**Video**
-- The Video Config screen exposes only **480i** and **1080i**. Legacy settings
-  saved as 240p/288p or 480p are migrated automatically to 480i.
+**视频**
+- 视频配置屏幕仅暴露 **480i** 和 **1080i**。保存为 240p/288p 或 480p 的旧设置会自动迁移到 480i。
 
-> Some bugs only reproduce on **real PS2 hardware** (emulators like NetherSX2 /
-> PCSX2 are more forgiving), which makes them harder to track down.
+> 某些错误仅在 **真实 PS2 硬件** 上重现（像 NetherSX2 /
+> PCSX2 这样的模拟器更宽容），这使得它们更难追踪。
 
 </details>
 
 ---
 
-## 📂 Project layout
+## 📂 项目布局
 
 <details>
-<summary>Show details</summary>
+<summary>显示详情</summary>
 
 
 ```
-src/snes/      SNES core (cpu, spc, ppu, coprocessors)
-src/nes/       NES core (InfoNES: core, cpu, apu, mappers, system)
-src/platform/  PlayStation 2 platform (gs, system, input, ui)
-src/modules/   shared modules (audio, netplay, ...)
-src/common/    shared helpers (render, base, io, debug)
-tools/         host‑side test harnesses (chip + OBJ verification)
+src/snes/      SNES 核心（cpu、spc、ppu、协处理器）
+src/nes/       NES 核心（InfoNES：核心、cpu、apu、mappers、系统）
+src/platform/  PlayStation 2 平台（gs、系统、输入、ui）
+src/modules/   共享模块（音频、网络对战等）
+src/common/    共享辅助工具（渲染、基础、io、调试）
+tools/         主机端测试工具（芯片 + OBJ 验证）
 ```
 
 </details>
 
 ---
 
-## ❤️ Credits
+## ❤️ 致谢
 
 <details>
-<summary>Show details</summary>
+<summary>显示详情</summary>
 
 
-- **[iaddis/SNESticle](https://github.com/iaddis/SNESticle)** — Icer Addis, the original emulator.
-- **[nesdev-org/MesenCE](https://github.com/nesdev-org/MesenCE)** — current
-  Mesen2-derived reference for 65816, interrupt and SNES DMA/HDMA behavior
-  used by the r19 audit.
+- **[iaddis/SNESticle](https://github.com/iaddis/SNESticle)** — Icer Addis，原始模拟器。
+- **[nesdev-org/MesenCE](https://github.com/nesdev-org/MesenCE)** — 当前
+  Mesen2 衍生的 65816、中断和 SNES DMA/HDMA 行为参考，由 r19 审计使用。
 - **[SingleStepTests/65816](https://github.com/SingleStepTests/65816)** —
-  complete per-opcode state, memory and bus-cycle vectors used by
-  `tools/cputest`.
-- **[ZSNES Team](https://www.zsnes.com)** — zsKnight, _Demo_, pagefault, Nach; their GPLv2 DSP‑4 HLE (`chips/dsp4emu.c`) is ported here as `src/snes/core/dsp4emu.*` (Top Gear 3000 support).
-- **[tmaul/SNESticle](https://github.com/tmaul/SNESticle)** — many later improvements.
-- **[Wolf3s/SNESticle](https://github.com/Wolf3s/SNESticle)** — fork used as one of the bases for this repository.
-- **Sardu** — for releasing the recovered source under the MIT license (2022).
-- **[jay-kumogata/InfoNES](https://github.com/jay-kumogata/InfoNES)** — the NES core integrated here.
-- **[game-music-emu](https://github.com/libgme/game-music-emu)** — Shay Green's Nes_Snd_Emu and Blip_Buffer used for the five cycle-timed base NES audio channels (LGPL-2.1+).
-- **[Mesen2](https://github.com/SourMesen/Mesen2)** — reference/default NTSC 2C02 palette used by the NES renderer.
-- **[upng](https://github.com/elanthis/upng)** — Sean Middleditch & Lode Vandevenne; the bundled single‑file PNG decoder used for cover art (zlib license). Extended in this repo with palette/indexed support.
-- **[libxmp-lite](https://github.com/libxmp/libxmp)** — Claudio Matsuoka and Hipolito Carraro Jr; official 4.7.2 embedded MOD/XM replay source used for tracker effects, timing and loops (MIT). The earlier PS2 integration by tatokis was the original porting reference.
-- **[hugorsgarcia/PS2SNESticle](https://github.com/hugorsgarcia/PS2SNESticle)** — **Hugo Garcia**, whose PS2 work was the reference for the controller / memory‑card / IRX bring‑up and the netplay module.
-- **Open‑PS2‑Loader**, **picodrive‑PS2** and **uLaunchELF** — references for correct PS2 boot, IOP and video behavior.
-- **ReyFxck** — this revival/fork and ongoing development.
-- **Adriano Oliveira** — real‑hardware testing.
-- **Control‑prompt icons** (`docs/controls/*.svg`) — original SVGs drawn for this repo; reuse freely.
+  完整的逐操作码状态、内存和总线周期向量，由
+  `tools/cputest` 使用。
+- **[ZSNES 团队](https://www.zsnes.com)** — zsKnight、_Demo_、pagefault、Nach；他们的 GPLv2 DSP‑4 HLE（`chips/dsp4emu.c`）在此移植为 `src/snes/core/dsp4emu.*`（顶级赛车 3000 支持）。
+- **[tmaul/SNESticle](https://github.com/tmaul/SNESticle)** — 许多后续改进。
+- **[Wolf3s/SNESticle](https://github.com/Wolf3s/SNESticle)** — 用作此仓库基础之一的分支。
+- **Sardu** — 于 2022 年以 MIT 许可证发布恢复的源代码。
+- **[jay-kumogata/InfoNES](https://github.com/jay-kumogata/InfoNES)** — 此处集成的 NES 核心。
+- **[game-music-emu](https://github.com/libgme/game-music-emu)** — Shay Green 的 Nes_Snd_Emu 和 Blip_Buffer 用于五个周期定时的基础 NES 音频通道（LGPL-2.1+）。
+- **[Mesen2](https://github.com/SourMesen/Mesen2)** — NES 渲染器使用的参考/默认 NTSC 2C02 调色板。
+- **[upng](https://github.com/elanthis/upng)** — Sean Middleditch 和 Lode Vandevenne；捆绑的单文件 PNG 解码器用于封面艺术（zlib 许可证）。在此仓库中扩展了调色板/索引支持。
+- **[libxmp-lite](https://github.com/libxmp/libxmp)** — Claudio Matsuoka 和 Hipolito Carraro Jr；官方 4.7.2 嵌入式 MOD/XM 重放源代码用于追踪器效果、时序和循环（MIT）。tatokis 的早期 PS2 集成是原始移植参考。
+- **[hugorsgarcia/PS2SNESticle](https://github.com/hugorsgarcia/PS2SNESticle)** — **Hugo Garcia**，他的 PS2 工作是控制器 / 记忆卡 / IRX 初始化和网络对战模块的参考。
+- **Open‑PS2‑Loader**、**picodrive‑PS2** 和 **uLaunchELF** — 正确 PS2 启动、IOP 和视频行为的参考。
+- **ReyFxck** — 此复活/分支及持续开发。
+- **Adriano Oliveira** — 真机测试。
+- **控制提示图标** (`docs/controls/*.svg`) — 为本仓库绘制的原始 SVG；可自由重用。
 
 
 </details>
 
 ---
 
-## 📜 License
+## 📜 许可证
 
 <details>
-<summary>Show details</summary>
+<summary>显示详情</summary>
 
 
-**GNU GPL v2** — see [`LICENSE`](LICENSE).
+**GNU GPL v2** — 见 [`LICENSE`](LICENSE)。
 
-The original SNESticle source (Icer Addis, 2022) was MIT‑licensed; the MIT
-permits relicensing, so this fork distributes the combined work under GPLv2 in
-order to incorporate the ZSNES DSP‑4 HLE (GPLv2). The original MIT notice for
-Icer Addis's portions is preserved verbatim inside [`LICENSE`](LICENSE).
+原始 SNESticle 源代码（Icer Addis，2022）采用 MIT 许可；MIT
+允许重新授权，因此此分支以 GPLv2 分发组合作品，以纳入 ZSNES DSP‑4 HLE（GPLv2）。Icer Addis 部分的原始 MIT 通知在 [`LICENSE`](LICENSE) 中逐字保留。
 
-- Copyright (c) 2022 Icer Addis (iaddis) — original SNESticle source
-- Copyright (c) 2026 ReyFxck — SNESticleRevive fork
-- DSP‑4 HLE (`src/snes/core/dsp4emu.*`): © 1997–2008 ZSNES Team (GPLv2)
+- 版权所有 (c) 2022 Icer Addis (iaddis) — 原始 SNESticle 源代码
+- 版权所有 (c) 2026 ReyFxck — SNESticleRevive 分支
+- DSP‑4 HLE (`src/snes/core/dsp4emu.*`): © 1997–2008 ZSNES 团队 (GPLv2)
 
 </details>
 
 ---
 
-# Yes, we still have a lot of free time :)
+# 是的，我们仍然有很多空闲时间 :)
